@@ -18,6 +18,7 @@ MAX_LONG_SENTENCE_WORDS = 30
 _HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 _SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]+|[^.!?]+$")
+_LIST_ITEM_PATTERN = re.compile(r"^\s*(?:\d+[.)]|[-*+])\s+\S", re.MULTILINE)
 
 
 def expected_headings(topic: str) -> list[str]:
@@ -90,9 +91,9 @@ def _section_text(lesson: str, section_name: str) -> str:
 
 
 def count_learner_questions(lesson: str) -> int:
-    """Count question marks in the designated learner-check section."""
+    """Count learner-check prompts, allowing numbered prompts without a question mark."""
     section = _section_text(lesson, "Check your understanding")
-    return section.count("?")
+    return max(section.count("?"), len(_LIST_ITEM_PATTERN.findall(section)))
 
 
 def run_static_checks(

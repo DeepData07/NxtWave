@@ -51,6 +51,19 @@ def test_missing_learner_questions_is_rejected() -> None:
     assert result.learner_question_count == 0
 
 
+def test_numbered_learner_prompts_count_even_without_question_marks() -> None:
+    lesson = good_lesson().replace(
+        "1. What problem does this lesson describe?\n"
+        "2. Why can this idea be useful?\n"
+        "3. What is one limitation to remember?",
+        "1. Describe the problem from the lesson.\n"
+        "2. Explain why the idea is useful.\n"
+        "3. Name one limitation.",
+    )
+
+    assert run_static_checks(lesson, TOPIC).learner_question_count == 3
+
+
 def test_invalid_retry_count_is_rejected() -> None:
     result = run_static_checks(good_lesson(), TOPIC, attempt_number=3, max_retries=2)
 

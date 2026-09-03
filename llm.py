@@ -135,6 +135,8 @@ def call_json_model(
     model: str | None = None,
     fallback_model: str | None = None,
     max_tokens: int | None = None,
+    json_schema: dict[str, Any] | None = None,
+    schema_name: str = "structured_response",
     client: Together | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
@@ -147,13 +149,19 @@ def call_json_model(
         },
         *messages,
     ]
+    response_format: dict[str, Any] = {"type": "json_object"}
+    if json_schema is not None:
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {"name": schema_name, "schema": json_schema},
+        }
     text = _request_with_fallback(
         client or create_client(settings),
         model=model or settings.fast_model,
         fallback_model=fallback_model or settings.fast_model_fallback,
         messages=json_messages,
         max_tokens=max_tokens or settings.fast_model_max_tokens,
-        response_format={"type": "json_object"},
+        response_format=response_format,
     )
     try:
         result = json.loads(text)

@@ -75,6 +75,31 @@ def test_json_call_rejects_non_object_response() -> None:
         )
 
 
+def test_json_call_passes_an_optional_json_schema() -> None:
+    requests: list[dict[str, object]] = []
+
+    class FakeCompletions:
+        def create(self, **request: object) -> object:
+            requests.append(request)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"status":"ok"}'))]
+            )
+
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    result = call_json_model(
+        [{"role": "user", "content": "hello"}],
+        json_schema={"type": "object"},
+        schema_name="smoke_schema",
+        client=fake_client,  # type: ignore[arg-type]
+    )
+
+    assert result == {"status": "ok"}
+    assert requests[0]["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "smoke_schema", "schema": {"type": "object"}},
+    }
+
+
 def test_model_catalog_accepts_v2_list_response() -> None:
     settings = Settings(
         together_api_key="local-test-key",

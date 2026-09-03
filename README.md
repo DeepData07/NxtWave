@@ -4,7 +4,7 @@ A staged take-home project for a self-evaluating, self-improving beginner-lesson
 
 ## Current status
 
-**Stage 2 complete:** Together SDK v2 client, configuration, error handling, and smoke checks are implemented.
+**Stage 3 complete:** a local-fact lesson planner and beginner lesson generator are implemented.
 
 ## Planned architecture
 
@@ -34,6 +34,8 @@ config.py          Local settings and run-directory helper
 models.py          Shared Pydantic domain contracts
 evaluation.py      Deterministic lesson checks and diagnostics
 llm.py             Bounded Together client and smoke-test command
+prompts.py         Visible prompts for planning and first-attempt generation
+lesson.py          Grounded lesson planning, generation, and artifact saving
 data/runs/         Per-run output artifacts (created on demand)
 tests/             Fast, credential-free unit tests
 ```
@@ -54,6 +56,13 @@ It makes one tiny text request (12 output tokens maximum) and one tiny JSON requ
 original evaluator model ID has the verified
 `Qwen/Qwen3-235B-A22B-Instruct-2507-FP8` fallback. A fallback is used at most once
 when Together reports a missing model, a 5xx provider error, or an empty completion.
+
+## Stage 3 local-grounding validation
+
+Before Tavily is introduced, Stage 3 uses a temporary local RAG fact fixture. The
+planner receives those facts as JSON context, the generator receives the same fact
+contract and learner profile, and the lesson is saved as `attempt_0.md` in a run
+directory. Live generation is validated separately from the mocked unit tests.
 
 ## Current deterministic checks
 
