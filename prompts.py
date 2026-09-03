@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from evaluation import expected_headings
 from models import (
@@ -44,8 +45,17 @@ def _facts_context(canonical_facts: list[CanonicalFact]) -> str:
     )
 
 
+def _guardrail_context(learned_guardrails: list[str] | None) -> str:
+    if not learned_guardrails:
+        return "No learned guardrails are active for this run."
+    return "\n".join(f"- {rule}" for rule in learned_guardrails)
+
+
 def build_lesson_plan_messages(
-    topic: str, learner: LearnerProfile, canonical_facts: list[CanonicalFact]
+    topic: str,
+    learner: LearnerProfile,
+    canonical_facts: list[CanonicalFact],
+    learned_guardrails: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """Create a compact structured-planning prompt from the local knowledge contract."""
     return [
@@ -64,6 +74,7 @@ def build_lesson_plan_messages(
                 f"Topic: {topic}\n\nLearner profile:\n{_learner_context(learner)}"
                 f"\n\nSupported facts (use only these as factual grounding):\n"
                 f"{_facts_context(canonical_facts)}"
+                f"\n\nActive learned guardrails:\n{_guardrail_context(learned_guardrails)}"
             ),
         },
     ]
@@ -74,6 +85,7 @@ def build_generation_messages(
     learner: LearnerProfile,
     lesson_plan: LessonPlan,
     canonical_facts: list[CanonicalFact],
+    learned_guardrails: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """Create the initial-generation prompt without evaluator feedback."""
     headings = expected_headings(topic)
@@ -96,6 +108,7 @@ def build_generation_messages(
                 f"Topic: {topic}\n\nLearner profile:\n{_learner_context(learner)}"
                 f"\n\nLesson outline:\n{json.dumps(lesson_plan.model_dump(), indent=2)}"
                 f"\n\nSupported facts:\n{_facts_context(canonical_facts)}"
+                f"\n\nActive learned guardrails:\n{_guardrail_context(learned_guardrails)}"
                 "\n\nWrite 900-1400 words. Use these exact Markdown headings:\n"
                 f"{heading_contract}\n\n"
                 "The Step-by-step example must use a familiar situation and walk through "
@@ -142,6 +155,7 @@ def build_revision_messages(
     canonical_facts: list[CanonicalFact],
     failure_packet: FailurePacket | None,
     static_failures: list[str],
+    learned_guardrails: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """Build a targeted repair prompt from stable policy and observed failures only."""
     headings = expected_headings(topic)
@@ -169,6 +183,7 @@ def build_revision_messages(
             "content": (
                 f"Topic: {topic}\n\nLearner profile:\n{_learner_context(learner)}"
                 f"\n\nCanonical facts:\n{_facts_context(canonical_facts)}"
+                f"\n\nActive learned guardrails:\n{_guardrail_context(learned_guardrails)}"
                 f"\n\nDeterministic failures to repair:\n{static_feedback}"
                 f"\n\nSemantic failure packet:\n{semantic_feedback}"
                 "\n\nUse this complete Markdown heading contract. Keep every section, "
@@ -177,6 +192,38 @@ def build_revision_messages(
                 f"{heading_contract}"
                 f"\n\nPrevious lesson:\n--- BEGIN LESSON ---\n{previous_lesson}"
                 "\n--- END LESSON ---"
+            ),
+        },
+    ]
+
+
+def build_guardrail_distillation_messages(
+    gate_id: str, examples: list[Any]
+) -> list[dict[str, str]]:
+    """Turn repeated evaluator evidence into one narrow, auditable teaching rule."""
+    evidence = [
+        {
+            "evidence": example.evidence,
+            "reason": example.reason,
+            "required_fix": example.required_fix,
+        }
+        for example in examples
+    ]
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You distill recurring lesson-quality failures into one short reusable "
+                "guardrail for future initial lesson generation. Keep the invariant quality "
+                "rubric unchanged. State an actionable teaching rule, not an explanation, "
+                "and do not mention run numbers, scores, or the evaluator."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Failed gate: {gate_id}\n\nRepeated failure evidence:\n"
+                f"{json.dumps(evidence, indent=2)}"
             ),
         },
     ]

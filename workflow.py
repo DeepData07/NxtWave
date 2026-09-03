@@ -20,6 +20,12 @@ from lesson import (
     save_lesson_artifact,
 )
 from llm import LLMConfigurationError, LLMRequestError
+from memory import (
+    GuardrailDistiller,
+    MemoryStore,
+    distill_guardrail,
+    update_memory_from_attempts,
+)
 from models import (
     AttemptRecord,
     CanonicalFact,
@@ -43,6 +49,7 @@ class WorkflowData(TypedDict, total=False):
     topic: str
     learner_profile: LearnerProfile
     canonical_facts: list[CanonicalFact]
+    learned_guardrails: list[str]
     run_id: str
     max_retries: int
     demo_fault: DemoFault
@@ -65,10 +72,19 @@ class WorkflowData(TypedDict, total=False):
 class WorkflowDependencies:
     """Injectable operations keep workflow-routing tests free from paid API calls."""
 
-    plan: Callable[[str, LearnerProfile, list[CanonicalFact]], LessonPlan]
-    generate: Callable[[str, LearnerProfile, LessonPlan, list[CanonicalFact]], str]
+    plan: Callable[[str, LearnerProfile, list[CanonicalFact], list[str]], LessonPlan]
+    generate: Callable[[str, LearnerProfile, LessonPlan, list[CanonicalFact], list[str]], str]
     revise: Callable[
-        [str, LearnerProfile, str, list[CanonicalFact], FailurePacket | None, list[str]], str
+        [
+            str,
+            LearnerProfile,
+            str,
+            list[CanonicalFact],
+            FailurePacket | None,
+            list[str],
+            list[str],
+        ],
+        str,
     ]
     inject_fault: Callable[[str, str], str]
     static_check: Callable[[str, str, int, int], StaticEvaluation]
@@ -82,19 +98,20 @@ def default_dependencies() -> WorkflowDependencies:
     """Create real local dependencies using the configured Together client helpers."""
     settings = get_settings()
     return WorkflowDependencies(
-        plan=lambda topic, learner, facts: plan_lesson(
-            topic, learner, facts, settings=settings
+        plan=lambda topic, learner, facts, guardrails: plan_lesson(
+            topic, learner, facts, guardrails, settings=settings
         ),
-        generate=lambda topic, learner, lesson_plan, facts: generate_lesson(
-            topic, learner, lesson_plan, facts, settings=settings
+        generate=lambda topic, learner, lesson_plan, facts, guardrails: generate_lesson(
+            topic, learner, lesson_plan, facts, guardrails, settings=settings
         ),
-        revise=lambda topic, learner, lesson, facts, packet, static_failures: revise_lesson(
+        revise=lambda topic, learner, lesson, facts, packet, static_failures, guardrails: revise_lesson(
             topic,
             learner,
             lesson,
             facts,
             packet,
             static_failures,
+            guardrails,
             settings=settings,
         ),
         inject_fault=inject_demo_fault,
@@ -108,9 +125,16 @@ def default_dependencies() -> WorkflowDependencies:
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    if hasattr(payload, "model_dump"):
-        payload = payload.model_dump(mode="json")
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    def serialise(value: Any) -> Any:
+        if hasattr(value, "model_dump"):
+            return value.model_dump(mode="json")
+        if isinstance(value, list):
+            return [serialise(item) for item in value]
+        if isinstance(value, dict):
+            return {key: serialise(item) for key, item in value.items()}
+        return value
+
+    path.write_text(json.dumps(serialise(payload), indent=2), encoding="utf-8")
 
 
 def _render_prompt(title: str, messages: list[dict[str, str]]) -> str:
@@ -136,7 +160,10 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
     def plan_node(state: WorkflowData) -> dict[str, Any]:
         return {
             "lesson_plan": dependencies.plan(
-                state["topic"], state["learner_profile"], state["canonical_facts"]
+                state["topic"],
+                state["learner_profile"],
+                state["canonical_facts"],
+                state.get("learned_guardrails", []),
             )
         }
 
@@ -146,6 +173,7 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
             state["learner_profile"],
             state["lesson_plan"],
             state["canonical_facts"],
+            state.get("learned_guardrails", []),
         )
         prompt_path = _save_prompt_snapshot(
             state["run_id"], state["attempt_number"], "Initial generation prompt", messages
@@ -156,6 +184,7 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
                 state["learner_profile"],
                 state["lesson_plan"],
                 state["canonical_facts"],
+                state.get("learned_guardrails", []),
             ),
             "prompt_kind": "initial",
             "prompt_snapshot_path": prompt_path,
@@ -251,6 +280,7 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
             state["canonical_facts"],
             state["failure_packet"],
             state["static_evaluation"].failures,
+            state.get("learned_guardrails", []),
         )
         prompt_path = _save_prompt_snapshot(
             state["run_id"], next_attempt, "Revision prompt", messages
@@ -263,6 +293,7 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
                 state["canonical_facts"],
                 state["failure_packet"],
                 state["static_evaluation"].failures,
+                state.get("learned_guardrails", []),
             ),
             "attempt_number": next_attempt,
             "prompt_kind": "revision",
@@ -322,6 +353,7 @@ def run_workflow(
     max_retries: int = 2,
     demo_fault: DemoFault = "none",
     dependencies: WorkflowDependencies | None = None,
+    learned_guardrails: list[str] | None = None,
 ) -> WorkflowData:
     """Run at most three complete lesson attempts and return the final graph state."""
     if not 0 <= max_retries <= 2:
@@ -333,6 +365,7 @@ def run_workflow(
             "topic": topic,
             "learner_profile": learner_profile or LearnerProfile(),
             "canonical_facts": canonical_facts,
+            "learned_guardrails": learned_guardrails or [],
             "run_id": run_id,
             "max_retries": max_retries,
             "demo_fault": demo_fault,
@@ -379,6 +412,8 @@ def run_dynamic_workflow(
     demo_fault: DemoFault = "none",
     dependencies: WorkflowDependencies | None = None,
     research_runner: ResearchRunner = run_research,
+    memory_store: MemoryStore | None = None,
+    guardrail_distiller: GuardrailDistiller | None = None,
 ) -> WorkflowData:
     """Research a topic and run the full lesson-quality loop using that run's facts.
 
@@ -386,14 +421,20 @@ def run_dynamic_workflow(
     interviewer can trace the exact source evidence behind every generated attempt.
     """
     learner = learner_profile or LearnerProfile()
-    ensure_run_directory(run_id)
+    settings = get_settings()
+    store = memory_store or MemoryStore()
+    loaded_guardrails = store.active_guardrails(settings.max_active_guardrails)
+    learned_guardrails = [guardrail.rule for guardrail in loaded_guardrails]
+    print(f"Loaded {len(learned_guardrails)} learned guardrails from memory.")
+    run_directory = ensure_run_directory(run_id)
+    _write_json(run_directory / "loaded_guardrails.json", loaded_guardrails)
     try:
         research_result = research_runner(
             topic, learner=learner, run_id=run_id
         )
     except (ResearchError, LLMConfigurationError, LLMRequestError) as error:
         return _save_research_failure(run_id, topic, error)
-    return run_workflow(
+    state = run_workflow(
         topic,
         research_result.canonical_facts,
         learner_profile=learner,
@@ -401,4 +442,30 @@ def run_dynamic_workflow(
         max_retries=max_retries,
         demo_fault=demo_fault,
         dependencies=dependencies,
+        learned_guardrails=learned_guardrails,
     )
+    if demo_fault == "none":
+        update = update_memory_from_attempts(
+            store,
+            run_id,
+            state.get("attempt_history", []),
+            threshold=settings.guardrail_failure_threshold,
+        distiller=guardrail_distiller or distill_guardrail,
+        )
+        _write_json(
+            run_directory / "memory_update.json",
+            {
+                "recorded_gate_ids": update.recorded_gate_ids,
+                "promoted_guardrails": update.promoted_guardrails,
+                "distillation_errors": update.distillation_errors,
+            },
+        )
+        if update.promoted_guardrails:
+            print(f"Promoted {len(update.promoted_guardrails)} learned guardrail(s).")
+    else:
+        _write_json(
+            run_directory / "memory_update.json",
+            {"skipped": "Demo-fault runs do not update cross-run learning memory."},
+        )
+    state["learned_guardrails"] = learned_guardrails
+    return state

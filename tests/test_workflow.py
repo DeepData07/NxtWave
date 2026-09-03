@@ -55,9 +55,9 @@ def test_factual_demo_fault_is_repaired_and_audited(tmp_path, monkeypatch) -> No
         return semantic_result()
 
     dependencies = WorkflowDependencies(
-        plan=lambda topic, learner, facts: LessonPlan(title=topic, sections=["Problem"]),
-        generate=lambda topic, learner, plan, facts: good_lesson(),
-        revise=lambda topic, learner, lesson, facts, packet, static_failures: good_lesson(),
+        plan=lambda topic, learner, facts, guardrails: LessonPlan(title=topic, sections=["Problem"]),
+        generate=lambda topic, learner, plan, facts, guardrails: good_lesson(),
+        revise=lambda topic, learner, lesson, facts, packet, static_failures, guardrails: good_lesson(),
         inject_fault=inject_demo_fault,
         static_check=lambda lesson, topic, attempt, max_retries: run_static_checks(
             lesson, topic, attempt_number=attempt, max_retries=max_retries
@@ -95,16 +95,16 @@ def test_static_failure_routes_to_revision_even_when_semantic_gates_pass(
     static_feedback: list[list[str]] = []
     calls = {"generate": 0}
 
-    def generate(topic, learner, plan, facts):
+    def generate(topic, learner, plan, facts, guardrails):
         calls["generate"] += 1
         return short_lesson()
 
-    def revise(topic, learner, lesson, facts, packet, static_failures):
+    def revise(topic, learner, lesson, facts, packet, static_failures, guardrails):
         static_feedback.append(static_failures)
         return good_lesson()
 
     dependencies = WorkflowDependencies(
-        plan=lambda topic, learner, facts: LessonPlan(title=topic, sections=["Problem"]),
+        plan=lambda topic, learner, facts, guardrails: LessonPlan(title=topic, sections=["Problem"]),
         generate=generate,
         revise=revise,
         inject_fault=lambda lesson, fault: lesson,
@@ -127,14 +127,14 @@ def test_retries_exhaust_after_three_total_attempts(tmp_path, monkeypatch) -> No
     monkeypatch.setattr("config.RUNS_DIR", tmp_path / "runs")
     revision_count = 0
 
-    def revise(topic, learner, lesson, facts, packet, static_failures):
+    def revise(topic, learner, lesson, facts, packet, static_failures, guardrails):
         nonlocal revision_count
         revision_count += 1
         return good_lesson()
 
     dependencies = WorkflowDependencies(
-        plan=lambda topic, learner, facts: LessonPlan(title=topic, sections=["Problem"]),
-        generate=lambda topic, learner, plan, facts: good_lesson(),
+        plan=lambda topic, learner, facts, guardrails: LessonPlan(title=topic, sections=["Problem"]),
+        generate=lambda topic, learner, plan, facts, guardrails: good_lesson(),
         revise=revise,
         inject_fault=lambda lesson, fault: lesson,
         static_check=lambda lesson, topic, attempt, max_retries: run_static_checks(
@@ -173,9 +173,9 @@ def test_dynamic_research_facts_feed_the_same_repair_loop(tmp_path, monkeypatch)
         return semantic_result("R1") if "retrains the language model's weights" in lesson else semantic_result()
 
     dependencies = WorkflowDependencies(
-        plan=lambda topic, learner, facts: LessonPlan(title=topic, sections=["Problem"]),
-        generate=lambda topic, learner, plan, facts: good_lesson(),
-        revise=lambda topic, learner, lesson, facts, packet, static_failures: good_lesson(),
+        plan=lambda topic, learner, facts, guardrails: LessonPlan(title=topic, sections=["Problem"]),
+        generate=lambda topic, learner, plan, facts, guardrails: good_lesson(),
+        revise=lambda topic, learner, lesson, facts, packet, static_failures, guardrails: good_lesson(),
         inject_fault=inject_demo_fault,
         static_check=lambda lesson, topic, attempt, max_retries: run_static_checks(
             lesson, topic, attempt_number=attempt, max_retries=max_retries

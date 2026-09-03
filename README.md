@@ -4,7 +4,8 @@ A staged take-home project for a self-evaluating, self-improving beginner-lesson
 
 ## Current status
 
-**Stage 4 complete:** an independent, structured eight-gate semantic evaluator is implemented.
+**Stage 8 complete:** dynamic grounding, a bounded correction loop, and SQLite-backed
+cross-run guardrails are implemented.
 
 ## Planned architecture
 
@@ -36,6 +37,7 @@ evaluation.py      Deterministic lesson checks and diagnostics
 llm.py             Bounded Together client and smoke-test command
 prompts.py         Visible prompts for planning and first-attempt generation
 lesson.py          Grounded lesson planning, generation, and artifact saving
+memory.py          SQLite failure history and learned-guardrail promotion
 data/runs/         Per-run output artifacts (created on demand)
 tests/             Fast, credential-free unit tests
 ```
@@ -134,6 +136,21 @@ print(state["final_status"])
 
 For the bounded factual-error demo, use `demo_fault="rag_factual_error"`. The fault is
 applied only to attempt 0; revisions are clean and are evaluated again from scratch.
+
+## Persistent self-evolving guardrails
+
+SQLite memory at `data/lesson_memory.db` records semantic gate failures once per
+`run_id` and gate. A repeated failure inside one retry loop cannot inflate the count.
+After the default threshold of two distinct runs, one bounded fast-model distillation
+creates a reusable rule for that gate. Demo-fault runs never update memory, preventing
+deliberate defects from teaching the system the wrong lesson.
+
+Before every dynamic run, the workflow loads at most five active guardrails (ranked by
+the number of distinct supporting runs) and injects their rules into the lesson planner
+and initial generator. The invariant R1–R8 rubric never changes. Each run saves
+`loaded_guardrails.json` and `memory_update.json` alongside its attempts, sources, and
+evaluations, making the difference between self-correction and cross-run evolution
+auditable.
 
 ## Current deterministic checks
 

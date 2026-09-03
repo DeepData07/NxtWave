@@ -15,6 +15,7 @@ def plan_lesson(
     topic: str,
     learner: LearnerProfile,
     canonical_facts: list[CanonicalFact],
+    learned_guardrails: list[str] | None = None,
     *,
     settings: Settings | None = None,
     client: object | None = None,
@@ -23,7 +24,7 @@ def plan_lesson(
     settings = settings or get_settings()
     try:
         response = call_json_model(
-            build_lesson_plan_messages(topic, learner, canonical_facts),
+            build_lesson_plan_messages(topic, learner, canonical_facts, learned_guardrails),
             model=settings.fast_model,
             fallback_model=settings.fast_model_fallback,
             max_tokens=settings.fast_model_max_tokens,
@@ -42,6 +43,7 @@ def generate_lesson(
     learner: LearnerProfile,
     lesson_plan: LessonPlan,
     canonical_facts: list[CanonicalFact],
+    learned_guardrails: list[str] | None = None,
     *,
     settings: Settings | None = None,
     client: object | None = None,
@@ -49,7 +51,9 @@ def generate_lesson(
     """Generate a complete first-attempt lesson from an auditable fact contract."""
     settings = settings or get_settings()
     return call_text_model(
-        build_generation_messages(topic, learner, lesson_plan, canonical_facts),
+        build_generation_messages(
+            topic, learner, lesson_plan, canonical_facts, learned_guardrails
+        ),
         model=settings.generator_model,
         fallback_model=settings.generator_model_fallback,
         max_tokens=settings.generator_model_max_tokens,
@@ -65,6 +69,7 @@ def revise_lesson(
     canonical_facts: list[CanonicalFact],
     failure_packet: FailurePacket | None,
     static_failures: list[str],
+    learned_guardrails: list[str] | None = None,
     *,
     settings: Settings | None = None,
     client: object | None = None,
@@ -79,6 +84,7 @@ def revise_lesson(
             canonical_facts,
             failure_packet,
             static_failures,
+            learned_guardrails,
         ),
         model=settings.generator_model,
         fallback_model=settings.generator_model_fallback,

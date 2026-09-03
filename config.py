@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
 RUNS_DIR = DATA_DIR / "runs"
+MEMORY_DB_PATH = DATA_DIR / "lesson_memory.db"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,9 @@ class Settings:
     generator_model_max_tokens: int
     evaluator_model_max_tokens: int
     research_fact_max_tokens: int = 1200
+    guardrail_failure_threshold: int = 2
+    max_active_guardrails: int = 5
+    memory_distillation_max_tokens: int = 180
 
 
 def get_settings() -> Settings:
@@ -59,6 +63,13 @@ def get_settings() -> Settings:
             os.getenv("EVALUATOR_MODEL_MAX_TOKENS") or "1200"
         ),
         research_fact_max_tokens=int(os.getenv("RESEARCH_FACT_MAX_TOKENS") or "1200"),
+        guardrail_failure_threshold=int(
+            os.getenv("GUARDRAIL_FAILURE_THRESHOLD") or "2"
+        ),
+        max_active_guardrails=int(os.getenv("MAX_ACTIVE_GUARDRAILS") or "5"),
+        memory_distillation_max_tokens=int(
+            os.getenv("MEMORY_DISTILLATION_MAX_TOKENS") or "180"
+        ),
     )
 
 

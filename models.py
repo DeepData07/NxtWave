@@ -116,6 +116,16 @@ class FailurePacket(BaseModel):
     failed_gates: list[GateResult] = Field(min_length=1)
 
 
+class LearnedGuardrail(BaseModel):
+    """A bounded cross-run rule created from repeated failures."""
+
+    guardrail_id: int | None = None
+    gate_id: GateId
+    rule: str = Field(min_length=1, max_length=500)
+    source_run_count: int = Field(ge=2)
+    active: bool = True
+
+
 class AttemptRecord(BaseModel):
     attempt_number: int = Field(ge=0, le=2)
     lesson_path: str
