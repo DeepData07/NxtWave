@@ -32,6 +32,7 @@ Copy `.env.example` to `.env` only when a later stage explicitly requires creden
 
 ```text
 config.py          Local settings and run-directory helper
+app.py              Thin Streamlit workflow/demo surface
 models.py          Shared Pydantic domain contracts
 evaluation.py      Deterministic lesson checks and diagnostics
 llm.py             Bounded Together client and smoke-test command
@@ -136,6 +137,19 @@ print(state["final_status"])
 
 For the bounded factual-error demo, use `demo_fault="rag_factual_error"`. The fault is
 applied only to attempt 0; revisions are clean and are evaluated again from scratch.
+
+## Streamlit demo
+
+Run the visual demo locally with:
+
+```powershell
+streamlit run app.py
+```
+
+The UI can launch a new dynamic workflow or inspect a saved artifact bundle. It displays
+sources, per-attempt metrics and gate comparison, evaluator evidence/fixes, rejection
+history, prompt snapshots, loaded/prompted memory guardrails, and the final lesson only
+when it has passed every hard requirement. It never displays API keys.
 
 ## Persistent self-evolving guardrails
 
