@@ -45,7 +45,8 @@ def get_settings() -> Settings:
         evaluator_model=os.getenv("EVALUATOR_MODEL")
         or "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         fast_model_fallback=os.getenv("FAST_MODEL_FALLBACK") or "Qwen/Qwen3.5-9B",
-        generator_model_fallback=os.getenv("GENERATOR_MODEL_FALLBACK") or None,
+        generator_model_fallback=os.getenv("GENERATOR_MODEL_FALLBACK")
+        or "Qwen/Qwen3.5-9B",
         evaluator_model_fallback=os.getenv("EVALUATOR_MODEL_FALLBACK")
         or "Qwen/Qwen3.5-9B",
         max_retries=int(os.getenv("MAX_RETRIES") or "2"),
