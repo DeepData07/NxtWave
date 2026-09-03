@@ -160,3 +160,31 @@ def test_text_call_retries_one_recoverable_model_error_with_its_fallback() -> No
 
     assert result == "fallback answer"
     assert requested_models == ["retired-model", "supported-model"]
+
+
+def test_text_call_uses_fallback_when_provider_omits_a_status_code() -> None:
+    requested_models: list[str] = []
+
+    class TemporaryProviderError(Exception):
+        pass
+
+    class FakeCompletions:
+        def create(self, **request: object) -> object:
+            requested_models.append(str(request["model"]))
+            if request["model"] == "primary-model":
+                raise TemporaryProviderError()
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="fallback answer"))]
+            )
+
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+
+    result = call_text_model(
+        [{"role": "user", "content": "hello"}],
+        model="primary-model",
+        fallback_model="fallback-model",
+        client=fake_client,  # type: ignore[arg-type]
+    )
+
+    assert result == "fallback answer"
+    assert requested_models == ["primary-model", "fallback-model"]

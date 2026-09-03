@@ -81,10 +81,23 @@ def _request_completion(
     except Exception as error:  # Provider SDK exposes version-specific HTTP errors.
         body = getattr(error, "body", {})
         provider_error = body.get("error", {}) if isinstance(body, dict) else {}
+        response = getattr(error, "response", None)
+        status_code = (
+            getattr(error, "status_code", None)
+            or getattr(error, "status", None)
+            or getattr(response, "status_code", None)
+        )
+        error_code = provider_error.get("code") or getattr(error, "code", None)
+        detail = f" ({type(error).__name__}"
+        if status_code is not None:
+            detail += f", HTTP {status_code}"
+        if error_code:
+            detail += f", code {error_code}"
+        detail += ")"
         raise LLMRequestError(
-            f"Together request failed for model '{model}'.",
-            status_code=getattr(error, "status_code", None),
-            error_code=provider_error.get("code"),
+            f"Together request failed for model '{model}'.{detail}",
+            status_code=status_code,
+            error_code=error_code,
         ) from error
     return _completion_text(response)
 
@@ -98,7 +111,7 @@ def _request_with_fallback(
     max_tokens: int,
     response_format: dict[str, Any] | None = None,
 ) -> str:
-    """Use one explicit fallback for an unavailable or server-failed primary model."""
+    """Use one explicit fallback for any non-auth provider failure of the primary model."""
     try:
         return _request_completion(
             client,
@@ -108,10 +121,8 @@ def _request_with_fallback(
             response_format=response_format,
         )
     except LLMRequestError as error:
-        model_unavailable = error.error_code == "model_not_available"
-        if not fallback_model or (
-            error.status_code not in {404, 500, 502, 503, 504} and not model_unavailable
-        ):
+        authentication_failure = error.status_code in {401, 403}
+        if not fallback_model or fallback_model == model or authentication_failure:
             raise
         return _request_completion(
             client,
