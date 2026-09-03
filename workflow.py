@@ -403,6 +403,99 @@ def _save_research_failure(run_id: str, topic: str, error: Exception) -> Workflo
     }
 
 
+def _read_artifact_json(path: Path, default: Any) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def _completed_attempts(run_directory: Path) -> list[AttemptRecord]:
+    """Rebuild completed attempt records if a provider request fails mid-graph."""
+    records: list[AttemptRecord] = []
+    for static_path in sorted(run_directory.glob("static_evaluation_*.json")):
+        attempt_number = int(static_path.stem.removeprefix("static_evaluation_"))
+        semantic_path = run_directory / f"evaluation_{attempt_number}.json"
+        if not semantic_path.is_file():
+            continue
+        try:
+            failure_path = run_directory / f"failure_packet_{attempt_number}.json"
+            records.append(
+                AttemptRecord(
+                    attempt_number=attempt_number,
+                    lesson_path=str(run_directory / f"attempt_{attempt_number}.md"),
+                    prompt_kind="initial" if attempt_number == 0 else "revision",
+                    prompt_snapshot_path=str(run_directory / f"prompt_{attempt_number}.md"),
+                    revision_feedback=(
+                        FailurePacket.model_validate(_read_artifact_json(failure_path, {}))
+                        if failure_path.is_file()
+                        else None
+                    ),
+                    static_evaluation=StaticEvaluation.model_validate(
+                        _read_artifact_json(static_path, {})
+                    ),
+                    semantic_evaluation=SemanticEvaluation.model_validate(
+                        _read_artifact_json(semantic_path, {})
+                    ),
+                )
+            )
+        except (ValueError, TypeError):
+            continue
+    return records
+
+
+def _save_workflow_failure(run_id: str, topic: str, error: LLMRequestError) -> WorkflowData:
+    """Make a mid-workflow Together failure reviewable instead of silently losing progress."""
+    run_directory = ensure_run_directory(run_id)
+    attempts = _completed_attempts(run_directory)
+    error_payload = {
+        "stage": "lesson_generation_or_evaluation",
+        "error_type": type(error).__name__,
+        "message": str(error),
+        "last_completed_attempt": attempts[-1].attempt_number if attempts else None,
+    }
+    rejection_log = [
+        {
+            "attempt": record.attempt_number,
+            "static_failures": record.static_evaluation.failures if record.static_evaluation else [],
+            "failed_gates": [
+                gate.model_dump(mode="json")
+                for gate in (record.semantic_evaluation.gates if record.semantic_evaluation else [])
+                if not gate.passed
+            ],
+        }
+        for record in attempts
+        if not (
+            record.static_evaluation
+            and record.static_evaluation.passed
+            and record.semantic_evaluation
+            and record.semantic_evaluation.overall_pass
+        )
+    ]
+    rejection_log.append({"stage": "provider", "error": error_payload})
+    _write_json(run_directory / "workflow_error.json", error_payload)
+    _write_json(run_directory / "rejection_log.json", rejection_log)
+    _write_json(
+        run_directory / "run_summary.json",
+        {
+            "run_id": run_id,
+            "topic": topic,
+            "final_status": "NEEDS_HUMAN_REVIEW",
+            "attempt_count": len(attempts),
+            "attempts": [record.model_dump(mode="json") for record in attempts],
+            "error": error_payload,
+        },
+    )
+    return {
+        "topic": topic,
+        "run_id": run_id,
+        "final_status": "NEEDS_HUMAN_REVIEW",
+        "attempt_history": attempts,
+        "rejection_log": rejection_log,
+        "error": str(error),
+    }
+
+
 def run_dynamic_workflow(
     topic: str,
     *,
@@ -434,23 +527,26 @@ def run_dynamic_workflow(
         )
     except (ResearchError, LLMConfigurationError, LLMRequestError) as error:
         return _save_research_failure(run_id, topic, error)
-    state = run_workflow(
-        topic,
-        research_result.canonical_facts,
-        learner_profile=learner,
-        run_id=run_id,
-        max_retries=max_retries,
-        demo_fault=demo_fault,
-        dependencies=dependencies,
-        learned_guardrails=learned_guardrails,
-    )
+    try:
+        state = run_workflow(
+            topic,
+            research_result.canonical_facts,
+            learner_profile=learner,
+            run_id=run_id,
+            max_retries=max_retries,
+            demo_fault=demo_fault,
+            dependencies=dependencies,
+            learned_guardrails=learned_guardrails,
+        )
+    except LLMRequestError as error:
+        state = _save_workflow_failure(run_id, topic, error)
     if demo_fault == "none":
         update = update_memory_from_attempts(
             store,
             run_id,
             state.get("attempt_history", []),
             threshold=settings.guardrail_failure_threshold,
-        distiller=guardrail_distiller or distill_guardrail,
+            distiller=guardrail_distiller or distill_guardrail,
         )
         _write_json(
             run_directory / "memory_update.json",

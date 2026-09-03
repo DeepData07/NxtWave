@@ -33,11 +33,15 @@ def test_saved_run_artifacts_are_loaded_for_the_demo(tmp_path: Path) -> None:
     }
     (run_directory / "run_summary.json").write_text(json.dumps(summary), encoding="utf-8")
     (run_directory / "prompt_0.md").write_text("# Prompt", encoding="utf-8")
+    (run_directory / "workflow_error.json").write_text(
+        json.dumps({"message": "Saved provider error"}), encoding="utf-8"
+    )
 
     assert list_saved_runs(tmp_path / "runs") == ["demo_run"]
     artifacts = load_run_artifacts("demo_run", tmp_path / "runs")
 
     assert artifacts["summary"]["final_status"] == "READY_TO_SHIP"
     assert artifacts["attempts"][0]["prompt"] == "# Prompt"
+    assert artifacts["workflow_error"]["message"] == "Saved provider error"
     assert gate_comparison(artifacts["attempts"])[0]["Attempt 1"] == "PASS"
     assert diagnostics_table(artifacts["attempts"])[0]["Words"] == 900

@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 from evaluation import run_static_checks
 from lesson import inject_demo_fault
+from llm import LLMRequestError
+from memory import MemoryStore
 from models import GateResult, LessonPlan, SemanticEvaluation
 from research import ResearchError
 from tests.lesson_fixtures import TOPIC, good_lesson, short_lesson
@@ -219,3 +221,40 @@ def test_dynamic_workflow_stops_cleanly_when_research_fails(tmp_path, monkeypatc
     assert summary["attempt_count"] == 0
     assert summary["final_status"] == "RESEARCH_FAILED"
     assert not (run_directory / "attempt_0.md").exists()
+
+
+def test_provider_failure_is_saved_with_completed_attempt_evidence(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.RUNS_DIR", tmp_path / "runs")
+
+    def research_runner(topic, *, learner, run_id):
+        return SimpleNamespace(canonical_facts=local_rag_facts())
+
+    def failing_revise(topic, learner, lesson, facts, packet, static_failures, guardrails):
+        raise LLMRequestError("Test Together timeout.")
+
+    dependencies = WorkflowDependencies(
+        plan=lambda topic, learner, facts, guardrails: LessonPlan(title=topic, sections=["Problem"]),
+        generate=lambda topic, learner, plan, facts, guardrails: good_lesson(),
+        revise=failing_revise,
+        inject_fault=lambda lesson, fault: lesson,
+        static_check=lambda lesson, topic, attempt, max_retries: run_static_checks(
+            lesson, topic, attempt_number=attempt, max_retries=max_retries
+        ),
+        semantic_check=lambda lesson, learner, facts: semantic_result("R3"),
+    )
+
+    state = run_dynamic_workflow(
+        TOPIC,
+        run_id="provider_failure",
+        dependencies=dependencies,
+        research_runner=research_runner,
+        memory_store=MemoryStore(tmp_path / "memory.db"),
+    )
+
+    run_directory = tmp_path / "runs" / "provider_failure"
+    error = json.loads((run_directory / "workflow_error.json").read_text(encoding="utf-8"))
+    summary = json.loads((run_directory / "run_summary.json").read_text(encoding="utf-8"))
+    assert state["final_status"] == "NEEDS_HUMAN_REVIEW"
+    assert error["message"] == "Test Together timeout."
+    assert summary["attempt_count"] == 1
+    assert (run_directory / "attempt_0.md").is_file()

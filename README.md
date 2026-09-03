@@ -166,6 +166,11 @@ and initial generator. The invariant R1–R8 rubric never changes. Each run save
 evaluations, making the difference between self-correction and cross-run evolution
 auditable.
 
+If Together fails during a later lesson generation or evaluation request, the workflow
+preserves completed attempts and writes `workflow_error.json`. The run ends as
+`NEEDS_HUMAN_REVIEW` with the provider message visible in the Streamlit UI; it does not
+discard the valid research or earlier lesson evidence.
+
 ## Current deterministic checks
 
 The evaluator rejects an empty or out-of-range lesson, missing required headings,

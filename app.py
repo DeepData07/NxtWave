@@ -57,6 +57,7 @@ def load_run_artifacts(run_id: str, runs_directory: Path = RUNS_DIR) -> dict[str
         "rejection_log": _read_json(run_directory / "rejection_log.json", []),
         "loaded_guardrails": _read_json(run_directory / "loaded_guardrails.json", []),
         "memory_update": _read_json(run_directory / "memory_update.json", {}),
+        "workflow_error": _read_json(run_directory / "workflow_error.json", {}),
         "final_lesson": (run_directory / "final_lesson.md").read_text(encoding="utf-8")
         if (run_directory / "final_lesson.md").is_file()
         else "",
@@ -114,6 +115,12 @@ def _render_status(artifacts: dict[str, Any]) -> None:
         f"Run: {summary.get('run_id', 'unknown')} · Topic: {summary.get('topic', 'unknown')} · "
         f"Attempts: {len(attempts)}"
     )
+    if artifacts["workflow_error"]:
+        st.error(
+            "Provider/workflow error: " + artifacts["workflow_error"].get("message", "Unknown error")
+        )
+        with st.expander("Saved workflow error details"):
+            st.json(artifacts["workflow_error"])
     steps = ["Research planning", "Source discovery", "Source curation", "Knowledge pack built"]
     if attempts:
         steps.extend(["Lesson planned", "Evaluation complete"])
@@ -140,9 +147,9 @@ def _render_sources(sources: list[dict[str, Any]]) -> None:
 
 def _render_evaluation(attempts: list[dict[str, Any]]) -> None:
     st.subheader("Attempt comparison")
-    st.dataframe(gate_comparison(attempts), use_container_width=True, hide_index=True)
+    st.dataframe(gate_comparison(attempts), width="stretch", hide_index=True)
     st.caption("This table is diagnostic only. Shipping remains Boolean: every hard check and gate must pass.")
-    st.dataframe(diagnostics_table(attempts), use_container_width=True, hide_index=True)
+    st.dataframe(diagnostics_table(attempts), width="stretch", hide_index=True)
 
     if attempts:
         selected = st.selectbox(
@@ -164,7 +171,7 @@ def _render_memory(artifacts: dict[str, Any]) -> None:
     guardrails = artifacts["loaded_guardrails"]
     st.write(f"Loaded memory guardrails: {len(guardrails)}")
     if guardrails:
-        st.dataframe(guardrails, use_container_width=True, hide_index=True)
+        st.dataframe(guardrails, width="stretch", hide_index=True)
     update = artifacts["memory_update"]
     if update:
         st.caption("This run's memory update")
@@ -172,7 +179,7 @@ def _render_memory(artifacts: dict[str, Any]) -> None:
     store = MemoryStore()
     st.dataframe(
         [{"Gate": gate_id, "Distinct failure runs": store.failure_count(gate_id)} for gate_id in GATE_IDS],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
