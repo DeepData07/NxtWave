@@ -56,6 +56,9 @@ class LessonPlan(BaseModel):
 class StaticEvaluation(BaseModel):
     passed: bool
     failures: list[str] = Field(default_factory=list)
+    missing_headings: list[str] = Field(default_factory=list)
+    learner_question_count: int = Field(ge=0, default=0)
+    attempt_number: int = Field(ge=0, default=0)
     word_count: int = Field(ge=0)
     average_sentence_length: float = Field(ge=0)
     long_sentence_count: int = Field(ge=0)

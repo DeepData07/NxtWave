@@ -4,7 +4,7 @@ A staged take-home project for a self-evaluating, self-improving beginner-lesson
 
 ## Current status
 
-**Stage 0 complete:** repository skeleton and local domain contracts only. No external API calls are implemented or required yet.
+**Stage 1 complete:** credential-free deterministic validation is implemented. No external API calls are implemented or required yet.
 
 ## Planned architecture
 
@@ -32,11 +32,20 @@ Copy `.env.example` to `.env` only when a later stage explicitly requires creden
 ```text
 config.py          Local settings and run-directory helper
 models.py          Shared Pydantic domain contracts
+evaluation.py      Deterministic lesson checks and diagnostics
 data/runs/         Per-run output artifacts (created on demand)
 tests/             Fast, credential-free unit tests
 ```
 
-Later stages will add the workflow, evaluation, research, LLM client, persistence, CLI, and Streamlit UI incrementally.
+Later stages will add the workflow, semantic evaluation, research, LLM client, persistence, CLI, and Streamlit UI incrementally.
+
+## Current deterministic checks
+
+The evaluator rejects an empty or out-of-range lesson, missing required headings,
+a missing example or recap section, fewer than three learner-check questions, and
+an invalid retry count. It also reports word count, heading count, average sentence
+length, and the count of sentences longer than 30 words. These diagnostics inform
+later semantic judgment; they do not by themselves decide beginner accessibility.
 
 ## Confirmed implementation refinements
 
