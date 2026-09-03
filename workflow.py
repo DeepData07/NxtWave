@@ -19,6 +19,7 @@ from lesson import (
     revise_lesson,
     save_lesson_artifact,
 )
+from llm import LLMConfigurationError, LLMRequestError
 from models import (
     AttemptRecord,
     CanonicalFact,
@@ -29,9 +30,10 @@ from models import (
     StaticEvaluation,
 )
 from prompts import build_generation_messages, build_revision_messages
+from research import ResearchError, ResearchResult, run_research
 
 
-FinalStatus = Literal["READY_TO_SHIP", "NEEDS_HUMAN_REVIEW"]
+FinalStatus = Literal["READY_TO_SHIP", "NEEDS_HUMAN_REVIEW", "RESEARCH_FAILED"]
 DemoFault = Literal[
     "none", "rag_factual_error", "overly_technical_language", "remove_example_section"
 ]
@@ -71,6 +73,9 @@ class WorkflowDependencies:
     inject_fault: Callable[[str, str], str]
     static_check: Callable[[str, str, int, int], StaticEvaluation]
     semantic_check: Callable[[str, LearnerProfile, list[CanonicalFact]], SemanticEvaluation]
+
+
+ResearchRunner = Callable[..., ResearchResult]
 
 
 def default_dependencies() -> WorkflowDependencies:
@@ -335,4 +340,65 @@ def run_workflow(
             "attempt_history": [],
             "rejection_log": [],
         }
+    )
+
+
+def _save_research_failure(run_id: str, topic: str, error: Exception) -> WorkflowData:
+    """Persist a terminal, inspectable outcome instead of generating without grounding."""
+    run_directory = ensure_run_directory(run_id)
+    error_message = str(error)
+    rejection_log = [{"stage": "research", "error": error_message}]
+    _write_json(run_directory / "rejection_log.json", rejection_log)
+    _write_json(
+        run_directory / "run_summary.json",
+        {
+            "run_id": run_id,
+            "topic": topic,
+            "final_status": "RESEARCH_FAILED",
+            "attempt_count": 0,
+            "attempts": [],
+            "error": error_message,
+        },
+    )
+    return {
+        "topic": topic,
+        "run_id": run_id,
+        "final_status": "RESEARCH_FAILED",
+        "attempt_history": [],
+        "rejection_log": rejection_log,
+        "error": error_message,
+    }
+
+
+def run_dynamic_workflow(
+    topic: str,
+    *,
+    learner_profile: LearnerProfile | None = None,
+    run_id: str,
+    max_retries: int = 2,
+    demo_fault: DemoFault = "none",
+    dependencies: WorkflowDependencies | None = None,
+    research_runner: ResearchRunner = run_research,
+) -> WorkflowData:
+    """Research a topic and run the full lesson-quality loop using that run's facts.
+
+    The research and lesson artifacts deliberately share one run directory, so an
+    interviewer can trace the exact source evidence behind every generated attempt.
+    """
+    learner = learner_profile or LearnerProfile()
+    ensure_run_directory(run_id)
+    try:
+        research_result = research_runner(
+            topic, learner_profile=learner, run_id=run_id
+        )
+    except (ResearchError, LLMConfigurationError, LLMRequestError) as error:
+        return _save_research_failure(run_id, topic, error)
+    return run_workflow(
+        topic,
+        research_result.canonical_facts,
+        learner_profile=learner,
+        run_id=run_id,
+        max_retries=max_retries,
+        demo_fault=demo_fault,
+        dependencies=dependencies,
     )

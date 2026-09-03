@@ -116,6 +116,25 @@ Every run saves `research_plan.json`, `source_manifest.json`, `canonical_facts.j
 and `knowledge_pack.md`. URLs are copied only from Tavily results—models never invent
 them. Retrieved pages are treated as untrusted evidence, never instructions.
 
+## End-to-end dynamic workflow
+
+`run_dynamic_workflow()` is the live entry point. It writes research artifacts and
+lesson-attempt artifacts into the same `data/runs/<run_id>/` directory, then ships only
+when both deterministic checks and `semantic_evaluation.overall_pass` succeed. If
+grounding fails, it writes a `RESEARCH_FAILED` run summary and never generates an
+ungrounded lesson. The existing `run_workflow()` entry point remains available for free,
+fixture-based tests.
+
+```python
+from workflow import run_dynamic_workflow
+
+state = run_dynamic_workflow("Introduction to RAG", run_id="rag_normal")
+print(state["final_status"])
+```
+
+For the bounded factual-error demo, use `demo_fault="rag_factual_error"`. The fault is
+applied only to attempt 0; revisions are clean and are evaluated again from scratch.
+
 ## Current deterministic checks
 
 The evaluator rejects an empty or out-of-range lesson, missing required headings,
