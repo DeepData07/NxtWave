@@ -7,8 +7,19 @@ uses only normal Python for measurable constraints.
 from __future__ import annotations
 
 import re
+from typing import Any
 
-from models import StaticEvaluation
+from pydantic import ValidationError
+
+from config import Settings, get_settings
+from llm import LLMRequestError, call_json_model
+from models import (
+    CanonicalFact,
+    FailurePacket,
+    LearnerProfile,
+    SemanticEvaluation,
+    StaticEvaluation,
+)
 
 
 HARD_MIN_WORDS = 700
@@ -19,6 +30,10 @@ _HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 _SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]+|[^.!?]+$")
 _LIST_ITEM_PATTERN = re.compile(r"^\s*(?:\d+[.)]|[-*+])\s+\S", re.MULTILINE)
+
+
+class SemanticEvaluationError(RuntimeError):
+    """Raised when a semantic evaluation cannot be obtained in the allowed format retries."""
 
 
 def expected_headings(topic: str) -> list[str]:
@@ -145,3 +160,102 @@ def run_static_checks(
         attempt_number=attempt_number,
         **diagnostics,
     )
+
+
+def validate_gate_set(payload: SemanticEvaluation | dict[str, Any]) -> SemanticEvaluation:
+    """Validate the exact, non-duplicated R1-R8 gate contract with Pydantic."""
+    if isinstance(payload, SemanticEvaluation):
+        return payload
+    return SemanticEvaluation.model_validate(payload)
+
+
+def semantic_evaluation_schema() -> dict[str, Any]:
+    """Return a provider-friendly schema; Pydantic remains the final authority."""
+    gate_ids = [f"R{number}" for number in range(1, 9)]
+    gate_schema = {
+        "type": "object",
+        "properties": {
+            "gate_id": {"type": "string", "enum": gate_ids},
+            "name": {"type": "string"},
+            "passed": {"type": "boolean"},
+            "evidence": {"type": "string"},
+            "reason": {"type": "string"},
+            "required_fix": {"type": "string"},
+        },
+        "required": ["gate_id", "name", "passed", "evidence", "reason", "required_fix"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "gates": {
+                "type": "array",
+                "minItems": 8,
+                "maxItems": 8,
+                "items": gate_schema,
+            }
+        },
+        "required": ["gates"],
+        "additionalProperties": False,
+    }
+
+
+def build_failure_packet(
+    attempt_number: int, evaluation: SemanticEvaluation
+) -> FailurePacket | None:
+    """Create transparent revision input from only the gates that failed."""
+    failed_gates = [gate for gate in evaluation.gates if not gate.passed]
+    if not failed_gates:
+        return None
+    return FailurePacket(attempt=attempt_number, failed_gates=failed_gates)
+
+
+def run_semantic_evaluation(
+    lesson: str,
+    learner: LearnerProfile,
+    canonical_facts: list[CanonicalFact],
+    *,
+    settings: Settings | None = None,
+    client: object | None = None,
+) -> SemanticEvaluation:
+    """Run the invariant eight-gate critic with one format-only retry at most."""
+    from prompts import build_semantic_evaluation_messages
+
+    settings = settings or get_settings()
+    messages = build_semantic_evaluation_messages(lesson, learner, canonical_facts)
+    last_error: Exception | None = None
+    for format_attempt in range(2):
+        try:
+            payload = call_json_model(
+                messages,
+                model=settings.evaluator_model,
+                fallback_model=settings.evaluator_model_fallback,
+                max_tokens=settings.evaluator_model_max_tokens,
+                json_schema=semantic_evaluation_schema(),
+                schema_name="semantic_evaluation",
+                client=client,  # type: ignore[arg-type]
+                settings=settings,
+            )
+            return validate_gate_set(payload)
+        except ValidationError as error:
+            last_error = error
+        except LLMRequestError as error:
+            if error.status_code is not None:
+                raise SemanticEvaluationError("Semantic evaluation request failed.") from error
+            last_error = error
+
+        if format_attempt == 0:
+            messages = [
+                *messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "Your prior output did not satisfy the required schema. Return a "
+                        "complete JSON object containing every R1-R8 gate exactly once."
+                    ),
+                },
+            ]
+
+    raise SemanticEvaluationError(
+        "Semantic evaluator returned malformed structured output twice."
+    ) from last_error

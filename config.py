@@ -46,7 +46,7 @@ def get_settings() -> Settings:
         fast_model_fallback=os.getenv("FAST_MODEL_FALLBACK") or "Qwen/Qwen3.5-9B",
         generator_model_fallback=os.getenv("GENERATOR_MODEL_FALLBACK") or None,
         evaluator_model_fallback=os.getenv("EVALUATOR_MODEL_FALLBACK")
-        or "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+        or "Qwen/Qwen3.5-9B",
         max_retries=int(os.getenv("MAX_RETRIES") or "2"),
         request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS") or "30"),
         fast_model_max_tokens=int(os.getenv("FAST_MODEL_MAX_TOKENS") or "400"),

@@ -137,7 +137,8 @@ def test_text_call_retries_one_recoverable_model_error_with_its_fallback() -> No
     requested_models: list[str] = []
 
     class MissingModelError(Exception):
-        status_code = 500
+        status_code = 400
+        body = {"error": {"code": "model_not_available"}}
 
     class FakeCompletions:
         def create(self, **request: object) -> object:

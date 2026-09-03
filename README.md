@@ -4,7 +4,7 @@ A staged take-home project for a self-evaluating, self-improving beginner-lesson
 
 ## Current status
 
-**Stage 3 complete:** a local-fact lesson planner and beginner lesson generator are implemented.
+**Stage 4 complete:** an independent, structured eight-gate semantic evaluator is implemented.
 
 ## Planned architecture
 
@@ -53,9 +53,9 @@ python -m llm --smoke-test
 It makes one tiny text request (12 output tokens maximum) and one tiny JSON request
 (24 output tokens maximum). The project uses Together SDK v2. The configured
 `openai/gpt-oss-20b` primary has the verified `Qwen/Qwen3.5-9B` fallback, and the
-original evaluator model ID has the verified
-`Qwen/Qwen3-235B-A22B-Instruct-2507-FP8` fallback. A fallback is used at most once
-when Together reports a missing model, a 5xx provider error, or an empty completion.
+original evaluator model ID has the verified `Qwen/Qwen3.5-9B` fallback. A fallback is used at most once
+when Together reports a missing model (including its `model_not_available` provider
+code), a 5xx provider error, or an empty completion.
 
 ## Stage 3 local-grounding validation
 
@@ -63,6 +63,32 @@ Before Tavily is introduced, Stage 3 uses a temporary local RAG fact fixture. Th
 planner receives those facts as JSON context, the generator receives the same fact
 contract and learner profile, and the lesson is saved as `attempt_0.md` in a run
 directory. Live generation is validated separately from the mocked unit tests.
+
+## Prompt architecture and improvement audit
+
+The system keeps three prompt layers distinct:
+
+1. **Stable base policy** — consistent beginner-teaching, grounding, jargon, and flow rules.
+2. **Current-run corrective feedback** — later revision prompts receive only the failed gates, their evidence, and their required fixes.
+3. **Cross-run learned guardrails** — Stage 8 will promote recurring failures into bounded rules injected into future *initial* prompts.
+
+The eight-gate rubric is invariant across attempts. A revision is never trusted because
+it claims to be better: the complete replacement lesson is evaluated again against the
+same learner profile, facts, and R1–R8 rubric.
+
+Stages 5 and 8 will save an auditable record for each attempt: lesson version, prompt
+snapshot, static metrics (word count, average sentence length, long-sentence count,
+and heading count), gate outcomes, evaluator evidence, failure packet, and revision
+feedback. This lets the UI and Loom walkthrough show precisely what changed and which
+metrics or gates improved without moving the acceptance criteria.
+
+## Semantic evaluator
+
+`run_semantic_evaluation()` evaluates the complete lesson independently against R1–R8
+using the same learner profile and canonical facts as the generator. It requires a
+provider-friendly JSON Schema plus Pydantic validation with every gate exactly once,
+retries malformed formatting once without using a lesson revision, and creates a
+failure packet containing only failed gates.
 
 ## Current deterministic checks
 

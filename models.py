@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 GateId = Literal["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]
@@ -66,6 +66,8 @@ class StaticEvaluation(BaseModel):
 
 
 class GateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     gate_id: GateId
     name: str = Field(min_length=1)
     passed: bool
@@ -75,6 +77,8 @@ class GateResult(BaseModel):
 
 
 class SemanticEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     gates: list[GateResult] = Field(min_length=8, max_length=8)
 
     @model_validator(mode="after")
@@ -98,6 +102,9 @@ class FailurePacket(BaseModel):
 class AttemptRecord(BaseModel):
     attempt_number: int = Field(ge=0, le=2)
     lesson_path: str
+    prompt_kind: Literal["initial", "revision"] = "initial"
+    prompt_snapshot_path: str | None = None
+    revision_feedback: FailurePacket | None = None
     static_evaluation: StaticEvaluation | None = None
     semantic_evaluation: SemanticEvaluation | None = None
 

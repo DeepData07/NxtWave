@@ -19,9 +19,16 @@ class LLMConfigurationError(RuntimeError):
 class LLMRequestError(RuntimeError):
     """Raised when Together cannot return a usable completion."""
 
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_code: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.error_code = error_code
 
 
 def create_client(settings: Settings | None = None) -> Together:
@@ -72,9 +79,12 @@ def _request_completion(
     try:
         response = client.chat.completions.create(**request)
     except Exception as error:  # Provider SDK exposes version-specific HTTP errors.
+        body = getattr(error, "body", {})
+        provider_error = body.get("error", {}) if isinstance(body, dict) else {}
         raise LLMRequestError(
             f"Together request failed for model '{model}'.",
             status_code=getattr(error, "status_code", None),
+            error_code=provider_error.get("code"),
         ) from error
     return _completion_text(response)
 
@@ -98,7 +108,10 @@ def _request_with_fallback(
             response_format=response_format,
         )
     except LLMRequestError as error:
-        if not fallback_model or error.status_code not in {404, 500, 502, 503, 504}:
+        model_unavailable = error.error_code == "model_not_available"
+        if not fallback_model or (
+            error.status_code not in {404, 500, 502, 503, 504} and not model_unavailable
+        ):
             raise
         return _request_completion(
             client,
@@ -142,19 +155,21 @@ def call_json_model(
 ) -> dict[str, Any]:
     """Request and parse a JSON object; Pydantic validation belongs to callers."""
     settings = settings or get_settings()
-    json_messages = [
-        {
-            "role": "system",
-            "content": "Return only one valid JSON object. Do not use Markdown fences.",
-        },
-        *messages,
-    ]
+    json_instruction = "Return only one valid JSON object. Do not use Markdown fences."
     response_format: dict[str, Any] = {"type": "json_object"}
     if json_schema is not None:
+        json_instruction += " Follow this JSON Schema exactly: " + json.dumps(json_schema)
         response_format = {
             "type": "json_schema",
             "json_schema": {"name": schema_name, "schema": json_schema},
         }
+    json_messages = [dict(message) for message in messages]
+    if json_messages and json_messages[0].get("role") == "system":
+        json_messages[0]["content"] = (
+            json_instruction + "\n\n" + json_messages[0]["content"]
+        )
+    else:
+        json_messages.insert(0, {"role": "system", "content": json_instruction})
     text = _request_with_fallback(
         client or create_client(settings),
         model=model or settings.fast_model,

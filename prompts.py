@@ -8,6 +8,22 @@ from evaluation import expected_headings
 from models import CanonicalFact, LearnerProfile, LessonPlan
 
 
+STABLE_LESSON_POLICY = """You are creating a lesson for a zero-background learner.
+Teach using simple English. Explain technical words when they first appear. Use a
+familiar example. Follow prerequisite order. Use only grounded facts."""
+
+SEMANTIC_GATE_RUBRIC = [
+    {"gate_id": "R1", "name": "Factual Accuracy", "rule": "No material claim contradicts supported canonical facts or presents a misconception as fact."},
+    {"gate_id": "R2", "name": "Essential Coverage", "rule": "Teaches what the topic is, why it matters, how it works, core components, and a limitation."},
+    {"gate_id": "R3", "name": "Beginner Accessibility", "rule": "Assumes no AI background, uses generally easy language, and introduces concepts from familiar to unfamiliar."},
+    {"gate_id": "R4", "name": "Jargon Explainability", "rule": "Defines important technical terms and expands acronyms at first meaningful use."},
+    {"gate_id": "R5", "name": "Learning by Example", "rule": "Includes a familiar, end-to-end example that teaches the actual process."},
+    {"gate_id": "R6", "name": "Teaching Flow", "rule": "Follows a coherent problem-to-mechanism-to-example-to-limits-to-recap order."},
+    {"gate_id": "R7", "name": "Appropriate Depth", "rule": "Explains the core mechanism without being shallow or overloading a beginner with expert detail."},
+    {"gate_id": "R8", "name": "Standalone and Complete", "rule": "Stands alone, includes a recap, and has at least three useful learner-check questions."},
+]
+
+
 def _learner_context(learner: LearnerProfile) -> str:
     return json.dumps(learner.model_dump(), indent=2)
 
@@ -60,10 +76,10 @@ def build_generation_messages(
         {
             "role": "system",
             "content": (
-                "Write one complete standalone Markdown lesson for a true beginner. "
-                "Use short, clear sentences and define technical words on first use. "
-                "Use only the supplied facts for technical claims. Do not invent sources, "
-                "URLs, or unsupported facts. Return the lesson only, with no preamble."
+                f"{STABLE_LESSON_POLICY}\n\n"
+                "Write one complete standalone Markdown lesson. Use only the supplied facts "
+                "for technical claims. Do not invent sources, URLs, or unsupported facts. "
+                "Return the lesson only, with no preamble."
             ),
         },
         {
@@ -76,6 +92,36 @@ def build_generation_messages(
                 f"{heading_contract}\n\n"
                 "The Step-by-step example must use a familiar situation and walk through "
                 "the full process. The final section must contain at least three questions."
+            ),
+        },
+    ]
+
+
+def build_semantic_evaluation_messages(
+    lesson: str,
+    learner: LearnerProfile,
+    canonical_facts: list[CanonicalFact],
+) -> list[dict[str, str]]:
+    """Build the invariant, independent-critic prompt for every lesson attempt."""
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are an independent, strict lesson evaluator. Apply the supplied rubric "
+                "exactly as written. Evaluate the lesson from scratch; do not trust any claim "
+                "that it was improved. Return exactly eight gate results, one for R1-R8. "
+                "Each result must include evidence, reason, and a concrete required fix. "
+                "For factual findings, cite relevant FACT_ identifiers."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Target learner:\n{_learner_context(learner)}"
+                f"\n\nCanonical facts:\n{_facts_context(canonical_facts)}"
+                f"\n\nInvariant rubric:\n{json.dumps(SEMANTIC_GATE_RUBRIC, indent=2)}"
+                f"\n\nLesson to evaluate:\n--- BEGIN LESSON ---\n{lesson}"
+                "\n--- END LESSON ---"
             ),
         },
     ]
