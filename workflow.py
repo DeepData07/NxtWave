@@ -389,7 +389,7 @@ def run_dynamic_workflow(
     ensure_run_directory(run_id)
     try:
         research_result = research_runner(
-            topic, learner_profile=learner, run_id=run_id
+            topic, learner=learner, run_id=run_id
         )
     except (ResearchError, LLMConfigurationError, LLMRequestError) as error:
         return _save_research_failure(run_id, topic, error)

@@ -164,7 +164,7 @@ def test_dynamic_research_facts_feed_the_same_repair_loop(tmp_path, monkeypatch)
     research_calls: list[tuple[str, str]] = []
     evaluated_facts: list[list] = []
 
-    def research_runner(topic, *, learner_profile, run_id):
+    def research_runner(topic, *, learner, run_id):
         research_calls.append((topic, run_id))
         return SimpleNamespace(canonical_facts=local_rag_facts())
 
