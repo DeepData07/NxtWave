@@ -23,7 +23,14 @@ class Settings:
     fast_model: str
     generator_model: str
     evaluator_model: str
+    fast_model_fallback: str | None
+    generator_model_fallback: str | None
+    evaluator_model_fallback: str | None
     max_retries: int
+    request_timeout_seconds: float
+    fast_model_max_tokens: int
+    generator_model_max_tokens: int
+    evaluator_model_max_tokens: int
 
 
 def get_settings() -> Settings:
@@ -32,12 +39,23 @@ def get_settings() -> Settings:
     return Settings(
         together_api_key=os.getenv("TOGETHER_API_KEY") or None,
         tavily_api_key=os.getenv("TAVILY_API_KEY") or None,
-        fast_model=os.getenv("FAST_MODEL", "openai/gpt-oss-20b"),
-        generator_model=os.getenv("GENERATOR_MODEL", "openai/gpt-oss-120b"),
-        evaluator_model=os.getenv(
-            "EVALUATOR_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507-tput"
+        fast_model=os.getenv("FAST_MODEL") or "openai/gpt-oss-20b",
+        generator_model=os.getenv("GENERATOR_MODEL") or "openai/gpt-oss-120b",
+        evaluator_model=os.getenv("EVALUATOR_MODEL")
+        or "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
+        fast_model_fallback=os.getenv("FAST_MODEL_FALLBACK") or "Qwen/Qwen3.5-9B",
+        generator_model_fallback=os.getenv("GENERATOR_MODEL_FALLBACK") or None,
+        evaluator_model_fallback=os.getenv("EVALUATOR_MODEL_FALLBACK")
+        or "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+        max_retries=int(os.getenv("MAX_RETRIES") or "2"),
+        request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS") or "30"),
+        fast_model_max_tokens=int(os.getenv("FAST_MODEL_MAX_TOKENS") or "400"),
+        generator_model_max_tokens=int(
+            os.getenv("GENERATOR_MODEL_MAX_TOKENS") or "2200"
         ),
-        max_retries=int(os.getenv("MAX_RETRIES", "2")),
+        evaluator_model_max_tokens=int(
+            os.getenv("EVALUATOR_MODEL_MAX_TOKENS") or "1200"
+        ),
     )
 
 

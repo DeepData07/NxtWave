@@ -4,7 +4,7 @@ A staged take-home project for a self-evaluating, self-improving beginner-lesson
 
 ## Current status
 
-**Stage 1 complete:** credential-free deterministic validation is implemented. No external API calls are implemented or required yet.
+**Stage 2 complete:** Together SDK v2 client, configuration, error handling, and smoke checks are implemented.
 
 ## Planned architecture
 
@@ -33,11 +33,27 @@ Copy `.env.example` to `.env` only when a later stage explicitly requires creden
 config.py          Local settings and run-directory helper
 models.py          Shared Pydantic domain contracts
 evaluation.py      Deterministic lesson checks and diagnostics
+llm.py             Bounded Together client and smoke-test command
 data/runs/         Per-run output artifacts (created on demand)
 tests/             Fast, credential-free unit tests
 ```
 
-Later stages will add the workflow, semantic evaluation, research, LLM client, persistence, CLI, and Streamlit UI incrementally.
+Later stages will add the workflow, semantic evaluation, research, persistence, CLI, and Streamlit UI incrementally.
+
+## Together smoke test
+
+After adding `TOGETHER_API_KEY` to your local `.env`, run:
+
+```powershell
+python -m llm --smoke-test
+```
+
+It makes one tiny text request (12 output tokens maximum) and one tiny JSON request
+(24 output tokens maximum). The project uses Together SDK v2. The configured
+`openai/gpt-oss-20b` primary has the verified `Qwen/Qwen3.5-9B` fallback, and the
+original evaluator model ID has the verified
+`Qwen/Qwen3-235B-A22B-Instruct-2507-FP8` fallback. A fallback is used at most once
+when Together reports a missing model, a 5xx provider error, or an empty completion.
 
 ## Current deterministic checks
 
