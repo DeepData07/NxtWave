@@ -6,3 +6,4 @@ __pycache__/
 coverage.xml
 htmlcov/
 data/lesson_memory.db
+data/runs/
