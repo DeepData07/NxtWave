@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from evaluation import expected_headings
-from models import CanonicalFact, LearnerProfile, LessonPlan
+from models import CanonicalFact, FailurePacket, LearnerProfile, LessonPlan
 
 
 STABLE_LESSON_POLICY = """You are creating a lesson for a zero-background learner.
@@ -121,6 +121,45 @@ def build_semantic_evaluation_messages(
                 f"\n\nCanonical facts:\n{_facts_context(canonical_facts)}"
                 f"\n\nInvariant rubric:\n{json.dumps(SEMANTIC_GATE_RUBRIC, indent=2)}"
                 f"\n\nLesson to evaluate:\n--- BEGIN LESSON ---\n{lesson}"
+                "\n--- END LESSON ---"
+            ),
+        },
+    ]
+
+
+def build_revision_messages(
+    topic: str,
+    learner: LearnerProfile,
+    previous_lesson: str,
+    canonical_facts: list[CanonicalFact],
+    failure_packet: FailurePacket | None,
+    static_failures: list[str],
+) -> list[dict[str, str]]:
+    """Build a targeted repair prompt from stable policy and observed failures only."""
+    semantic_feedback = (
+        json.dumps(failure_packet.model_dump(), indent=2)
+        if failure_packet
+        else "No semantic gates failed."
+    )
+    static_feedback = "\n".join(f"- {failure}" for failure in static_failures) or "None"
+    return [
+        {
+            "role": "system",
+            "content": (
+                f"{STABLE_LESSON_POLICY}\n\n"
+                "Produce a complete replacement Markdown lesson. Preserve correct content "
+                "where possible, repair every listed issue, and do not add unsupported facts. "
+                "Do not describe edits or claim that you fixed the lesson."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Topic: {topic}\n\nLearner profile:\n{_learner_context(learner)}"
+                f"\n\nCanonical facts:\n{_facts_context(canonical_facts)}"
+                f"\n\nDeterministic failures to repair:\n{static_feedback}"
+                f"\n\nSemantic failure packet:\n{semantic_feedback}"
+                f"\n\nPrevious lesson:\n--- BEGIN LESSON ---\n{previous_lesson}"
                 "\n--- END LESSON ---"
             ),
         },

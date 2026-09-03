@@ -90,6 +90,19 @@ provider-friendly JSON Schema plus Pydantic validation with every gate exactly o
 retries malformed formatting once without using a lesson revision, and creates a
 failure packet containing only failed gates.
 
+## Attempt history and bounded correction
+
+Stage 5 records an audit bundle for every lesson attempt: `prompt_<n>.md`,
+`attempt_<n>.md`, `static_evaluation_<n>.json`, `evaluation_<n>.json`, and, when
+needed, `failure_packet_<n>.json`. The final `run_summary.json` contains a comparison
+of all static metrics and gate outcomes; `rejection_log.json` records exactly why an
+attempt was rejected.
+
+The LangGraph workflow applies demo faults only to attempt 0. Every revised lesson is
+then re-evaluated with the same deterministic checks, learner profile, canonical facts,
+and stable R1–R8 rubric. It stops after the initial generation plus at most two revisions:
+`READY_TO_SHIP` when every hard requirement passes, otherwise `NEEDS_HUMAN_REVIEW`.
+
 ## Current deterministic checks
 
 The evaluator rejects an empty or out-of-range lesson, missing required headings,
