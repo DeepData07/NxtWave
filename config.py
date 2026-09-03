@@ -31,6 +31,7 @@ class Settings:
     fast_model_max_tokens: int
     generator_model_max_tokens: int
     evaluator_model_max_tokens: int
+    research_fact_max_tokens: int = 1200
 
 
 def get_settings() -> Settings:
@@ -56,6 +57,7 @@ def get_settings() -> Settings:
         evaluator_model_max_tokens=int(
             os.getenv("EVALUATOR_MODEL_MAX_TOKENS") or "1200"
         ),
+        research_fact_max_tokens=int(os.getenv("RESEARCH_FACT_MAX_TOKENS") or "1200"),
     )
 
 

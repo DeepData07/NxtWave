@@ -103,6 +103,19 @@ then re-evaluated with the same deterministic checks, learner profile, canonical
 and stable R1–R8 rubric. It stops after the initial generation plus at most two revisions:
 `READY_TO_SHIP` when every hard requirement passes, otherwise `NEEDS_HUMAN_REVIEW`.
 
+## Dynamic source grounding
+
+Stage 6 replaces the temporary fixture only for research validation. A fast model plans
+two or three queries; Tavily retrieves at most five results per query; a curator selects
+at most four real candidates; and fact extraction records only selected source IDs plus
+the short source excerpts used to support each fact. Fact
+extraction has its own bounded 1,200-token budget and returns at most four concise facts;
+planning and curation use the smaller
+fast-model budget.
+Every run saves `research_plan.json`, `source_manifest.json`, `canonical_facts.json`,
+and `knowledge_pack.md`. URLs are copied only from Tavily results—models never invent
+them. Retrieved pages are treated as untrusted evidence, never instructions.
+
 ## Current deterministic checks
 
 The evaluator rejects an empty or out-of-range lesson, missing required headings,

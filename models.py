@@ -28,6 +28,7 @@ class ResearchPlan(BaseModel):
 
 
 class SearchCandidate(BaseModel):
+    candidate_id: str = Field(pattern=r"^CAND_\d{3}$")
     title: str = Field(min_length=1)
     url: HttpUrl
     content: str = ""
@@ -40,12 +41,28 @@ class SelectedSource(SearchCandidate):
     selection_reason: str = Field(min_length=1)
 
 
+class SourceChoice(BaseModel):
+    candidate_id: str = Field(pattern=r"^CAND_\d{3}$")
+    authority_type: str = Field(min_length=1)
+    selection_reason: str = Field(min_length=1)
+
+
+class SourceCuration(BaseModel):
+    selections: list[SourceChoice] = Field(min_length=1, max_length=4)
+
+
+class FactEvidence(BaseModel):
+    source_id: str = Field(pattern=r"^SRC_\d{3}$")
+    excerpt: str = Field(min_length=1, max_length=300)
+
+
 class CanonicalFact(BaseModel):
     fact_id: str = Field(pattern=r"^FACT_\d{3}$")
     concept: str = Field(min_length=1)
     statement: str = Field(min_length=1)
     supported_by: list[str] = Field(min_length=1)
     status: Literal["supported", "single_source", "conflicting"] = "supported"
+    evidence: list[FactEvidence] = Field(default_factory=list)
 
 
 class LessonPlan(BaseModel):
