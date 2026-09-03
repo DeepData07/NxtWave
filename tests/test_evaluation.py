@@ -21,6 +21,22 @@ def test_missing_example_section_is_rejected() -> None:
     assert "Step-by-step example" in result.missing_headings
 
 
+def test_harmless_heading_typography_and_topic_variants_are_accepted() -> None:
+    lesson = (
+        good_lesson()
+        .replace("## Start with a simple problem", "## A simple problem")
+        .replace("## What is Introduction to RAG", "## What is RAG?")
+        .replace("## Why does it matter", "## Why does RAG matter?")
+        .replace("## How does it work", "## How does RAG work?")
+        .replace("## Step-by-step example", "## Step‑by‑step example")
+    )
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is True
+    assert result.missing_headings == []
+
+
 def test_missing_recap_section_is_rejected() -> None:
     lesson = good_lesson().replace("## Quick recap", "## Final note")
 

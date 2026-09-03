@@ -144,6 +144,10 @@ def build_revision_messages(
     static_failures: list[str],
 ) -> list[dict[str, str]]:
     """Build a targeted repair prompt from stable policy and observed failures only."""
+    headings = expected_headings(topic)
+    heading_contract = "\n".join(
+        [f"# {headings[0]}"] + [f"## {heading}" for heading in headings[1:]]
+    )
     semantic_feedback = (
         json.dumps(failure_packet.model_dump(), indent=2)
         if failure_packet
@@ -167,6 +171,10 @@ def build_revision_messages(
                 f"\n\nCanonical facts:\n{_facts_context(canonical_facts)}"
                 f"\n\nDeterministic failures to repair:\n{static_feedback}"
                 f"\n\nSemantic failure packet:\n{semantic_feedback}"
+                "\n\nUse this complete Markdown heading contract. Keep every section, "
+                "do not rename headings, and put at least three numbered questions in the final "
+                "section:\n"
+                f"{heading_contract}"
                 f"\n\nPrevious lesson:\n--- BEGIN LESSON ---\n{previous_lesson}"
                 "\n--- END LESSON ---"
             ),

@@ -7,6 +7,7 @@ uses only normal Python for measurable constraints.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from pydantic import ValidationError
@@ -79,7 +80,28 @@ def calculate_diagnostics(lesson: str) -> dict[str, float | int]:
 
 
 def _normalise_heading(heading: str) -> str:
-    return " ".join(heading.lower().strip().rstrip("?!:").split())
+    """Compare headings by meaning-preserving typography, not fragile glyph choice."""
+    normalized = unicodedata.normalize("NFKC", heading).lower()
+    normalized = re.sub(r"[‐‑‒–—−]", "-", normalized)
+    return " ".join(normalized.strip().rstrip("?!:").split())
+
+
+def _heading_aliases(topic: str) -> dict[str, set[str]]:
+    """Allow a small set of pedagogical heading variants without weakening coverage."""
+    simplified_topic = re.sub(r"^introduction to\s+", "", topic, flags=re.IGNORECASE)
+    return {
+        "Start with a simple problem": {"A simple problem"},
+        f"What is {topic}": {f"What is {simplified_topic}"},
+        "Why does it matter": {f"Why does {simplified_topic} matter"},
+        "How does it work": {f"How does {simplified_topic} work"},
+    }
+
+
+def _heading_is_present(
+    expected_heading: str, present_headings: set[str], topic: str
+) -> bool:
+    accepted = {expected_heading, *_heading_aliases(topic).get(expected_heading, set())}
+    return any(_normalise_heading(heading) in present_headings for heading in accepted)
 
 
 def _present_heading_names(lesson: str) -> set[str]:
@@ -135,7 +157,7 @@ def run_static_checks(
     missing_headings = [
         heading
         for heading in expected_headings(topic)
-        if _normalise_heading(heading) not in present_headings
+        if not _heading_is_present(heading, present_headings, topic)
     ]
     if missing_headings:
         failures.append("Missing required headings: " + ", ".join(missing_headings) + ".")
