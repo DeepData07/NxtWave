@@ -116,7 +116,24 @@ def test_truncated_final_learner_question_is_rejected() -> None:
 
     assert result.passed is False
     assert result.learner_question_count == 2
-    assert "Lesson appears incomplete or truncated near the end." in result.failures
+    assert "Check your understanding contains an incomplete or truncated question." in result.failures
+
+
+def test_exact_truncated_rag_question_pattern_is_rejected() -> None:
+    lesson = good_lesson().replace(
+        "1. What problem does this lesson describe?\n"
+        "2. Why can this idea be useful?\n"
+        "3. What is one limitation to remember?",
+        "1. Complete question?\n"
+        "2. Complete question?\n"
+        "3. Why can RAG provide m",
+    )
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert result.learner_question_count == 2
+    assert "Check your understanding contains an incomplete or truncated question." in result.failures
 
 
 def test_unmatched_fenced_code_block_is_rejected() -> None:

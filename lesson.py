@@ -18,6 +18,11 @@ _LEGACY_MATH_SIGNALS = re.compile(
     r"\\(?:frac|sqrt|operatorname|text|cdot|times|top|theta|mathbf)|[=^]"
 )
 _LEGACY_NORM = re.compile(r"(?<!\\)\|([A-Za-z][A-Za-z0-9_]*)\|")
+_FENCED_MATH = re.compile(r"^\s*```math\s*\n(?P<body>[\s\S]*?)\n\s*```\s*$", re.MULTILINE)
+_JOINED_TERM_HEADER = re.compile(
+    r"^(?P<prefix>\s*\|\s*)(?P<bold>\*\*)?Term(?P=bold)?Simple explanation(?P<suffix>\s*\|?\s*)$",
+    re.MULTILINE,
+)
 
 
 def _normalise_legacy_display_math(lesson: str) -> str:
@@ -32,6 +37,19 @@ def _normalise_legacy_display_math(lesson: str) -> str:
         return f"\\[\n{body}\n\\]"
 
     return _LEGACY_DISPLAY_MATH.sub(replace, lesson)
+
+
+def _normalise_fenced_math(lesson: str) -> str:
+    """Convert explicit math fences to canonical display LaTeX delimiters."""
+    return _FENCED_MATH.sub(lambda match: f"\\[\n{match.group('body').strip()}\n\\]", lesson)
+
+
+def _normalise_obvious_joined_table_headers(lesson: str) -> str:
+    """Repair only the known unambiguous two-column Term header corruption."""
+    return _JOINED_TERM_HEADER.sub(
+        lambda match: f"{match.group('prefix')}{match.group('bold') or ''}Term{match.group('bold') or ''} | Simple explanation{match.group('suffix')}",
+        lesson,
+    )
 
 
 def _normalise_tab_separated_tables(lesson: str) -> str:
@@ -69,7 +87,11 @@ def normalise_lesson_markdown(lesson: str, topic: str) -> str:
         marker = "#" if index == 0 else "##"
         pattern = rf"(?im)^(?!\s*#)\s*{re.escape(heading)}\s*$"
         normalised = re.sub(pattern, f"{marker} {heading}", normalised)
-    return _normalise_legacy_display_math(_normalise_tab_separated_tables(normalised))
+    return _normalise_legacy_display_math(
+        _normalise_tab_separated_tables(
+            _normalise_obvious_joined_table_headers(_normalise_fenced_math(normalised))
+        )
+    )
 
 
 def plan_lesson(

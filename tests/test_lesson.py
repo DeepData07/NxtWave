@@ -133,3 +133,13 @@ def test_legacy_math_and_tabular_output_are_made_portable() -> None:
     assert "| Value | Meaning |" in normalised
     assert "\\[" in normalised
     assert "\\lVert A \\rVert \\cdot \\lVert B \\rVert" in normalised
+
+
+def test_fenced_math_and_obvious_joined_term_header_are_normalised() -> None:
+    lesson = "| **Term**Simple explanation |\n| --- | --- |\n| RAG | Search before answering |\n\n```math\n\\frac{a}{b}\n```"
+
+    normalised = normalise_lesson_markdown(lesson, "Introduction to RAG")
+
+    assert "| **Term** | Simple explanation |" in normalised
+    assert "```math" not in normalised
+    assert "\\[\n\\frac{a}{b}\n\\]" in normalised

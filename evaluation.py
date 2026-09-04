@@ -196,8 +196,19 @@ def run_static_checks(
 
     learner_section = _section_text(lesson, "Check your understanding")
     numbered_questions = list(_NUMBERED_QUESTION_PATTERN.finditer(learner_section))
-    if numbered_questions and any("?" not in question.group(1) for question in numbered_questions):
-        failures.append("Each numbered learner question must contain a question mark.")
+    incomplete_questions = [
+        question for question in numbered_questions if "?" not in question.group(1)
+    ]
+    if incomplete_questions:
+        if (
+            len(incomplete_questions) == 1
+            and incomplete_questions[0] is numbered_questions[-1]
+        ):
+            failures.append(
+                "Check your understanding contains an incomplete or truncated question."
+            )
+        else:
+            failures.append("Each numbered learner question must contain a question mark.")
 
     if _lesson_appears_truncated(lesson):
         failures.append("Lesson appears incomplete or truncated near the end.")

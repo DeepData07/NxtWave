@@ -42,6 +42,8 @@ function normaliseLessonMarkdown(markdown) {
   const withTables = output.join("\n");
 
   return withTables
+    .replace(/^\s*```math\s*\n([\s\S]*?)\n\s*```\s*$/gm, (_, inner) => `$$\n${normaliseLegacyMath(inner.trim())}\n$$`)
+    .replace(/^(\s*\|\s*)(\*\*)?Term\2?Simple explanation(\s*\|?\s*)$/gm, (_, prefix, bold = "", suffix) => `${prefix}${bold}Term${bold} | Simple explanation${suffix}`)
     .replace(/^\[\s*\n([\s\S]*?)\n\s*\]$/gm, (block, inner) => {
       const looksMathematical = /\\(?:frac|sqrt|operatorname|text|cdot|times|top|theta|mathbf)|[=^]/.test(inner);
       return looksMathematical ? `$$\n${normaliseLegacyMath(inner.trim())}\n$$` : block;
@@ -52,7 +54,9 @@ function normaliseLessonMarkdown(markdown) {
 
 function displayTitle(value) {
   const text = String(value || "");
-  return text.replace(/^(what is|introduction to)\s+\1\s+/i, "$1 ");
+  return text
+    .replace(/^(what is|introduction to)\s+\1\s+/i, "$1 ")
+    .replace(/^what is\s+(how does|why does|when does|where does)\s+/i, "$1 ");
 }
 
 export function LessonRenderer({ lesson, isRunning, currentStep }) {

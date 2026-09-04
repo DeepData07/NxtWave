@@ -5,13 +5,17 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
-from config import ensure_run_directory
+from dotenv import load_dotenv
+from config import PROJECT_ROOT, ensure_run_directory
 from evaluation import calculate_diagnostics
 from models import GateResult, SemanticEvaluation, StaticEvaluation
 
 DEMO_TRIGGER_TOPIC = "How does RAG help AI answer with facts?"
 
 def deterministic_demo_enabled(topic: str) -> bool:
+    # This route runs before get_settings(), which normally loads .env. Load it here
+    # so a flag placed in the project's .env takes effect before any live dependency.
+    load_dotenv(PROJECT_ROOT / ".env")
     return os.getenv("ENABLE_DETERMINISTIC_DEMO", "").lower() == "true" and topic.strip() == DEMO_TRIGGER_TOPIC
 
 def _write(path: Path, value: Any) -> None:
@@ -25,7 +29,7 @@ def _lesson(technical: bool) -> str:
 
 {opening}
 
-## What is How does RAG help AI answer with facts?
+## What is RAG?
 
 RAG stands for Retrieval-Augmented Generation. It retrieves relevant information from an external knowledge source and lets a language model use that information while producing an answer.
 
