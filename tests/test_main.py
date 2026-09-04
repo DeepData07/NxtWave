@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from main import main
+from main import app, main
+
+
+def test_main_exports_the_fastapi_app_for_default_asgi_hosts() -> None:
+    assert app.title == "NxtWave Lesson Quality Agent UI"
 
 
 def test_cli_passes_topic_fault_and_run_id_to_workflow(capsys) -> None:

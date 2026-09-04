@@ -6,6 +6,7 @@ import argparse
 from datetime import datetime
 from typing import Callable
 
+from ui_server import app
 from workflow import DemoFault, WorkflowData, run_dynamic_workflow
 
 
