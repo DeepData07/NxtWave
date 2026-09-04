@@ -55,8 +55,16 @@ function displayTitle(value) {
   return text.replace(/^(what is|introduction to)\s+\1\s+/i, "$1 ");
 }
 
-export function LessonRenderer({ lesson }) {
-  if (!lesson) return <p className="empty-state">The first generated lesson will appear here while its quality checks run.</p>;
+export function LessonRenderer({ lesson, isRunning, currentStep }) {
+  if (!lesson) {
+    return (
+      <div className="empty-state">
+        {isRunning && <span className="lesson-loader" aria-label="Workflow is running" />}
+        <p className="loading-title">{isRunning ? currentStep || "Preparing the lesson…" : "Waiting for first lesson draft…"}</p>
+        <p>The first generated lesson will appear here while its quality checks run.</p>
+      </div>
+    );
+  }
   return (
     <article className="lesson-content">
       <ReactMarkdown

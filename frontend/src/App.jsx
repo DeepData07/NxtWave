@@ -35,6 +35,8 @@ export default function App() {
     return attempts.find((attempt) => attempt.number === selectedAttemptNumber) || attempts.at(-1);
   }, [selectedAttemptNumber, view]);
 
+  const workflowRunning = view?.run.status === "RUNNING";
+
   async function startRun(event) {
     event.preventDefault();
     if (!topic.trim()) return;
@@ -91,6 +93,12 @@ export default function App() {
       {view && <section className="run-area" aria-live="polite">
         <div className="run-summary">{[["Topic", view.run.topic], ["Status", view.run.status.replaceAll("_", " ")], ["Attempts", view.attempts.length], ["Sources", view.grounding.source_count]].map(([label, value]) => <span className="summary-item" key={label}>{label}: <strong>{value}</strong></span>)}</div>
         <div className="current-step"><span>CURRENT STEP</span>{view.run.current_step || view.run.status.replaceAll("_", " ")}</div>
+        <form className="new-topic-form" onSubmit={startRun}>
+          <label htmlFor="next-topic">Generate another lesson</label>
+          <input id="next-topic" value={topic} onChange={(event) => setTopic(event.target.value)} maxLength="200" placeholder="Enter another topic" disabled={workflowRunning} required />
+          <Button type="submit" size="sm" disabled={workflowRunning || starting}>{workflowRunning ? "Workflow running" : starting ? "Starting…" : "Generate Lesson"}</Button>
+          {workflowRunning && <span className="new-topic-hint">Wait for this workflow to finish before starting another.</span>}
+        </form>
         {view.run.status !== "RUNNING" && <div className={`completion-notice ${statusClass(view.run.status)}`}>{view.run.status === "READY_TO_SHIP" ? "Workflow complete — all static checks and all 8 quality gates passed. This lesson is ready to ship." : "Workflow complete — human review required after the maximum number of attempts. The latest lesson is available below for review and download."}</div>}
         {error && <p className="run-error">{error}</p>}
 
@@ -108,7 +116,7 @@ export default function App() {
             {view.retry_changes?.find((change) => change.to_attempt === selectedAttempt?.number) && <section className="inspection-section"><p className="eyebrow">WHAT CHANGED</p><div className="retry-changes">{(() => { const change = view.retry_changes.find((item) => item.to_attempt === selectedAttempt.number); return <><p>Attempt {change.from_attempt} → Attempt {change.to_attempt}</p>{change.resolved_gates.map((gate) => <div className="retry-change" key={gate.id}><p>{gate.id} — {gate.label}: FAIL → PASS</p><p>Evaluator requested: {gate.targeted_fix}</p></div>)}{change.supporting_diagnostics.map((item) => <p key={item.label}>{item.label}: {item.before} → {item.after}</p>)}</>; })()}</div></section>}
           </aside>
 
-          <section className="lesson-panel"><div className="lesson-header"><div><p className="eyebrow">LESSON OUTPUT</p><h2>{selectedAttempt ? `Attempt ${selectedAttempt.number}` : "Waiting for first lesson draft..."}</h2></div><div className="lesson-actions"><Button className="download-button" variant="outline" size="sm" type="button" disabled={!selectedAttempt?.lesson} onClick={downloadLesson}>Download .md</Button><span className={`status-pill ${statusClass(selectedAttempt?.status || view.run.status)}`}>{selectedAttempt?.status === "PASSED" ? "READY TO SHIP" : selectedAttempt?.status || "RUNNING"}</span></div></div><LessonRenderer lesson={selectedAttempt?.lesson} /></section>
+          <section className="lesson-panel"><div className="lesson-header"><div><p className="eyebrow">LESSON OUTPUT</p><h2>{selectedAttempt ? `Attempt ${selectedAttempt.number}` : "Waiting for first lesson draft..."}</h2></div><div className="lesson-actions"><Button className="download-button" variant="outline" size="sm" type="button" disabled={!selectedAttempt?.lesson} onClick={downloadLesson}>Download .md</Button><span className={`status-pill ${statusClass(selectedAttempt?.status || view.run.status)}`}>{selectedAttempt?.status === "PASSED" ? "READY TO SHIP" : selectedAttempt?.status || "RUNNING"}</span></div></div><LessonRenderer lesson={selectedAttempt?.lesson} isRunning={workflowRunning} currentStep={view.run.current_step} /></section>
         </div>
       </section>}
     </main>
