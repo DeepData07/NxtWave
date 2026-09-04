@@ -77,4 +77,4 @@ def test_fastapi_adapter_starts_a_run_and_exposes_only_ui_safe_artifacts(tmp_pat
         assert client.get(f"/api/runs/{run_id}/memory").status_code == 200
         assert "READY TO SHIP" in client.get(f"/api/runs/{run_id}/events").text
         assert any(item["id"] == run_id for item in client.get("/api/runs").json())
-        assert "Stage 2 adapter" in client.get("/").text
+        assert "NxtWave Lesson Quality Agent" in client.get("/").text

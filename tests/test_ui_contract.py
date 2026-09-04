@@ -101,3 +101,14 @@ def test_event_recorder_persists_before_notifying_a_ui_listener(tmp_path: Path, 
     events = json.loads((tmp_path / "runs" / "event_demo" / "events.json").read_text())
     assert events == delivered
     assert events[0]["title"] == "Source discovery complete"
+
+
+def test_ui_contract_exposes_a_generated_draft_while_evaluation_is_running(tmp_path: Path) -> None:
+    run_directory = tmp_path / "runs" / "in_progress"
+    run_directory.mkdir(parents=True)
+    (run_directory / "attempt_0.md").write_text("# Draft lesson", encoding="utf-8")
+
+    view = load_run_view("in_progress", tmp_path / "runs")
+
+    assert view["attempts"][0]["status"] == "EVALUATING"
+    assert view["attempts"][0]["lesson"] == "# Draft lesson"

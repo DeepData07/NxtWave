@@ -73,11 +73,17 @@ def _normalise_attempt(run_directory: Path, payload: dict[str, Any]) -> dict[str
             }
         )
     failed_gates = [gate for gate in gates if not gate["passed"]]
+    has_static_evaluation = bool(static)
+    has_semantic_evaluation = bool(semantic)
     static_pass = bool(static.get("passed", False))
     semantic_pass = bool(gates) and not failed_gates
     return {
         "number": number + 1,
-        "status": "PASSED" if static_pass and semantic_pass else "REJECTED",
+        "status": (
+            "EVALUATING"
+            if not has_static_evaluation or not has_semantic_evaluation
+            else "PASSED" if static_pass and semantic_pass else "REJECTED"
+        ),
         "lesson": _read_text(run_directory / f"attempt_{number}.md"),
         "prompt_kind": payload.get("prompt_kind", "initial"),
         "gates": gates,
@@ -182,7 +188,13 @@ def load_run_view(run_id: str, runs_directory: Path = RUNS_DIR) -> dict[str, Any
     summary = _read_json(run_directory / "run_summary.json", {})
     sources = _read_json(run_directory / "source_manifest.json", [])
     facts = _read_json(run_directory / "canonical_facts.json", [])
-    attempts = [_normalise_attempt(run_directory, item) for item in summary.get("attempts", [])]
+    attempt_payloads = summary.get("attempts", [])
+    if not attempt_payloads:
+        attempt_payloads = [
+            {"attempt_number": int(path.stem.removeprefix("attempt_"))}
+            for path in sorted(run_directory.glob("attempt_*.md"))
+        ]
+    attempts = [_normalise_attempt(run_directory, item) for item in attempt_payloads]
     loaded_guardrails = _read_json(run_directory / "loaded_guardrails.json", [])
     memory_update = _read_json(run_directory / "memory_update.json", {})
     stored_events = _read_json(run_directory / "events.json", [])

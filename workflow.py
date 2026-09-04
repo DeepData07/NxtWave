@@ -236,6 +236,9 @@ def build_workflow(
             state["canonical_facts"],
             state.get("learned_guardrails", []),
         )
+        # Make the current draft readable by the UI while evaluation is still running.
+        # The existing persist node remains the authoritative attempt record writer.
+        save_lesson_artifact(lesson, state["run_id"], attempt_number=attempt)
         if event_recorder is not None:
             event_recorder.emit(
                 stage="generation",
@@ -421,6 +424,8 @@ def build_workflow(
             state["static_evaluation"].failures,
             state.get("learned_guardrails", []),
         )
+        # As above, this is a display artifact only until the normal persist node records checks.
+        save_lesson_artifact(lesson, state["run_id"], attempt_number=next_attempt)
         if event_recorder is not None:
             event_recorder.emit(
                 stage="generation",
