@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -34,6 +35,7 @@ from models import (
     LessonPlan,
     SemanticEvaluation,
     StaticEvaluation,
+    WorkflowEvent,
 )
 from prompts import build_generation_messages, build_revision_messages
 from research import ResearchError, ResearchResult, run_research
@@ -92,6 +94,39 @@ class WorkflowDependencies:
 
 
 ResearchRunner = Callable[..., ResearchResult]
+WorkflowEventSink = Callable[[dict[str, Any]], None]
+
+
+class RunEventRecorder:
+    """Persist progress before notifying an optional UI listener."""
+
+    def __init__(self, run_id: str, sink: WorkflowEventSink | None = None) -> None:
+        self._path = ensure_run_directory(run_id) / "events.json"
+        self._sink = sink
+        self._events: list[dict[str, Any]] = []
+        _write_json(self._path, self._events)
+
+    def emit(
+        self,
+        *,
+        stage: str,
+        status: Literal["started", "completed", "failed", "retry", "warning"],
+        title: str,
+        detail: str = "",
+        attempt: int | None = None,
+    ) -> None:
+        event = WorkflowEvent(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            stage=stage,
+            status=status,
+            title=title,
+            detail=detail,
+            attempt=attempt,
+        ).model_dump(mode="json")
+        self._events.append(event)
+        _write_json(self._path, self._events)
+        if self._sink is not None:
+            self._sink(event)
 
 
 def default_dependencies() -> WorkflowDependencies:
@@ -152,22 +187,38 @@ def _save_prompt_snapshot(
     return str(path)
 
 
-def build_workflow(dependencies: WorkflowDependencies) -> Any:
+def build_workflow(
+    dependencies: WorkflowDependencies, event_recorder: RunEventRecorder | None = None
+) -> Any:
     """Build the bounded LangGraph graph; every attempt follows the same evaluators."""
 
     graph = StateGraph(WorkflowData)
 
     def plan_node(state: WorkflowData) -> dict[str, Any]:
-        return {
-            "lesson_plan": dependencies.plan(
-                state["topic"],
-                state["learner_profile"],
-                state["canonical_facts"],
-                state.get("learned_guardrails", []),
+        lesson_plan = dependencies.plan(
+            state["topic"],
+            state["learner_profile"],
+            state["canonical_facts"],
+            state.get("learned_guardrails", []),
+        )
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="lesson_planning",
+                status="completed",
+                title="Lesson plan created",
+                detail=f"{len(lesson_plan.sections)} beginner lesson sections planned",
             )
-        }
+        return {"lesson_plan": lesson_plan}
 
     def generate_node(state: WorkflowData) -> dict[str, Any]:
+        attempt = state["attempt_number"]
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="generation",
+                status="started",
+                title=f"Generating attempt {attempt + 1}",
+                attempt=attempt,
+            )
         messages = build_generation_messages(
             state["topic"],
             state["learner_profile"],
@@ -178,19 +229,36 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
         prompt_path = _save_prompt_snapshot(
             state["run_id"], state["attempt_number"], "Initial generation prompt", messages
         )
+        lesson = dependencies.generate(
+            state["topic"],
+            state["learner_profile"],
+            state["lesson_plan"],
+            state["canonical_facts"],
+            state.get("learned_guardrails", []),
+        )
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="generation",
+                status="completed",
+                title=f"Attempt {attempt + 1} generated",
+                detail=f"{len(lesson.split())} words",
+                attempt=attempt,
+            )
         return {
-            "current_lesson": dependencies.generate(
-                state["topic"],
-                state["learner_profile"],
-                state["lesson_plan"],
-                state["canonical_facts"],
-                state.get("learned_guardrails", []),
-            ),
+            "current_lesson": lesson,
             "prompt_kind": "initial",
             "prompt_snapshot_path": prompt_path,
         }
 
     def inject_fault_node(state: WorkflowData) -> dict[str, Any]:
+        if event_recorder is not None and state["demo_fault"] != "none":
+            event_recorder.emit(
+                stage="demo_fault",
+                status="warning",
+                title="Demo fault injected",
+                detail="Applied after generation; the evaluator is not told the fault label.",
+                attempt=state["attempt_number"],
+            )
         return {
             "current_lesson": dependencies.inject_fault(
                 state["current_lesson"], state["demo_fault"]
@@ -198,14 +266,25 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
         }
 
     def static_node(state: WorkflowData) -> dict[str, Any]:
-        return {
-            "static_evaluation": dependencies.static_check(
-                state["current_lesson"],
-                state["topic"],
-                state["attempt_number"],
-                state["max_retries"],
+        evaluation = dependencies.static_check(
+            state["current_lesson"],
+            state["topic"],
+            state["attempt_number"],
+            state["max_retries"],
+        )
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="static_evaluation",
+                status="completed" if evaluation.passed else "failed",
+                title=f"Static checks {'completed' if evaluation.passed else 'found issues'}",
+                detail=(
+                    f"{evaluation.word_count} words; {evaluation.learner_question_count} learner questions"
+                    if evaluation.passed
+                    else "; ".join(evaluation.failures)
+                ),
+                attempt=state["attempt_number"],
             )
-        }
+        return {"static_evaluation": evaluation}
 
     def semantic_node(state: WorkflowData) -> dict[str, Any]:
         evaluation = dependencies.semantic_check(
@@ -213,6 +292,15 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
             state["learner_profile"],
             state["canonical_facts"],
         )
+        if event_recorder is not None:
+            passed_gates = sum(gate.passed for gate in evaluation.gates)
+            event_recorder.emit(
+                stage="semantic_evaluation",
+                status="completed" if evaluation.overall_pass else "failed",
+                title="Semantic evaluation completed",
+                detail=f"{passed_gates}/8 quality gates passed",
+                attempt=state["attempt_number"],
+            )
         return {
             "semantic_evaluation": evaluation,
             "failure_packet": build_failure_packet(state["attempt_number"], evaluation),
@@ -260,12 +348,43 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
             and state["semantic_evaluation"].overall_pass
         )
         if all_passed:
+            if event_recorder is not None:
+                event_recorder.emit(
+                    stage="quality_decision",
+                    status="completed",
+                    title=f"Attempt {state['attempt_number'] + 1} passed all hard gates",
+                    detail="Static checks and all 8 semantic gates passed.",
+                    attempt=state["attempt_number"],
+                )
             return {
                 "final_status": "READY_TO_SHIP",
                 "final_lesson": state["current_lesson"],
             }
         if state["attempt_number"] >= state["max_retries"]:
+            if event_recorder is not None:
+                event_recorder.emit(
+                    stage="quality_decision",
+                    status="failed",
+                    title="Revision budget exhausted",
+                    detail="The best lesson is available for human review.",
+                    attempt=state["attempt_number"],
+                )
             return {"final_status": "NEEDS_HUMAN_REVIEW"}
+        if event_recorder is not None:
+            failed_gates = [
+                gate.gate_id for gate in state["semantic_evaluation"].gates if not gate.passed
+            ]
+            event_recorder.emit(
+                stage="quality_decision",
+                status="failed",
+                title=f"Attempt {state['attempt_number'] + 1} rejected",
+                detail=(
+                    f"Failed gates: {', '.join(failed_gates)}"
+                    if failed_gates
+                    else "Static checks require a targeted revision."
+                ),
+                attempt=state["attempt_number"],
+            )
         return {}
 
     def route_after_decision(state: WorkflowData) -> str:
@@ -273,6 +392,14 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
 
     def revise_node(state: WorkflowData) -> dict[str, Any]:
         next_attempt = state["attempt_number"] + 1
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="revision",
+                status="retry",
+                title="Targeted revision requested",
+                detail="Evaluator evidence and deterministic failures are sent to the revision prompt.",
+                attempt=next_attempt,
+            )
         messages = build_revision_messages(
             state["topic"],
             state["learner_profile"],
@@ -285,16 +412,25 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
         prompt_path = _save_prompt_snapshot(
             state["run_id"], next_attempt, "Revision prompt", messages
         )
+        lesson = dependencies.revise(
+            state["topic"],
+            state["learner_profile"],
+            state["current_lesson"],
+            state["canonical_facts"],
+            state["failure_packet"],
+            state["static_evaluation"].failures,
+            state.get("learned_guardrails", []),
+        )
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="generation",
+                status="completed",
+                title=f"Attempt {next_attempt + 1} generated",
+                detail=f"{len(lesson.split())} words",
+                attempt=next_attempt,
+            )
         return {
-            "current_lesson": dependencies.revise(
-                state["topic"],
-                state["learner_profile"],
-                state["current_lesson"],
-                state["canonical_facts"],
-                state["failure_packet"],
-                state["static_evaluation"].failures,
-                state.get("learned_guardrails", []),
-            ),
+            "current_lesson": lesson,
             "attempt_number": next_attempt,
             "prompt_kind": "revision",
             "prompt_snapshot_path": prompt_path,
@@ -315,6 +451,17 @@ def build_workflow(dependencies: WorkflowDependencies) -> Any:
             "attempts": [record.model_dump(mode="json") for record in state.get("attempt_history", [])],
         }
         _write_json(run_directory / "run_summary.json", summary)
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="workflow",
+                status="completed" if state["final_status"] == "READY_TO_SHIP" else "failed",
+                title=(
+                    "READY TO SHIP"
+                    if state["final_status"] == "READY_TO_SHIP"
+                    else "NEEDS HUMAN REVIEW"
+                ),
+                detail="Workflow complete.",
+            )
         return {}
 
     graph.add_node("plan_lesson", plan_node)
@@ -354,12 +501,13 @@ def run_workflow(
     demo_fault: DemoFault = "none",
     dependencies: WorkflowDependencies | None = None,
     learned_guardrails: list[str] | None = None,
+    event_recorder: RunEventRecorder | None = None,
 ) -> WorkflowData:
     """Run at most three complete lesson attempts and return the final graph state."""
     if not 0 <= max_retries <= 2:
         raise ValueError("max_retries must be between 0 and 2")
     ensure_run_directory(run_id)
-    workflow = build_workflow(dependencies or default_dependencies())
+    workflow = build_workflow(dependencies or default_dependencies(), event_recorder)
     return workflow.invoke(
         {
             "topic": topic,
@@ -507,6 +655,7 @@ def run_dynamic_workflow(
     research_runner: ResearchRunner = run_research,
     memory_store: MemoryStore | None = None,
     guardrail_distiller: GuardrailDistiller | None = None,
+    event_sink: WorkflowEventSink | None = None,
 ) -> WorkflowData:
     """Research a topic and run the full lesson-quality loop using that run's facts.
 
@@ -514,6 +663,13 @@ def run_dynamic_workflow(
     interviewer can trace the exact source evidence behind every generated attempt.
     """
     learner = learner_profile or LearnerProfile()
+    event_recorder = RunEventRecorder(run_id, event_sink)
+    event_recorder.emit(
+        stage="workflow",
+        status="started",
+        title="Workflow started",
+        detail="Preparing research and grounded lesson generation.",
+    )
     settings = get_settings()
     store = memory_store or MemoryStore()
     loaded_guardrails = store.active_guardrails(settings.max_active_guardrails)
@@ -521,12 +677,61 @@ def run_dynamic_workflow(
     print(f"Loaded {len(learned_guardrails)} learned guardrails from memory.")
     run_directory = ensure_run_directory(run_id)
     _write_json(run_directory / "loaded_guardrails.json", loaded_guardrails)
+    event_recorder.emit(
+        stage="memory",
+        status="completed",
+        title="Cross-run memory loaded",
+        detail=f"{len(loaded_guardrails)} learned guardrails available.",
+    )
+    event_recorder.emit(
+        stage="research",
+        status="started",
+        title="Research and grounding started",
+        detail="Creating a topic-specific research plan.",
+    )
     try:
         research_result = research_runner(
             topic, learner=learner, run_id=run_id
         )
     except (ResearchError, LLMConfigurationError, LLMRequestError) as error:
+        event_recorder.emit(
+            stage="research",
+            status="failed",
+            title="Research failed",
+            detail=str(error),
+        )
         return _save_research_failure(run_id, topic, error)
+    research_plan = getattr(research_result, "plan", None)
+    candidates = getattr(research_result, "candidates", [])
+    selected_sources = getattr(research_result, "selected_sources", [])
+    event_recorder.emit(
+        stage="research_planning",
+        status="completed",
+        title="Research plan created",
+        detail=(
+            f"{len(research_plan.search_queries)} search queries prepared"
+            if research_plan is not None
+            else "Topic-specific research plan completed."
+        ),
+    )
+    event_recorder.emit(
+        stage="source_discovery",
+        status="completed",
+        title="Source discovery complete",
+        detail=f"{len(candidates)} candidate sources found",
+    )
+    event_recorder.emit(
+        stage="source_curation",
+        status="completed",
+        title="Authoritative sources selected",
+        detail=f"{len(selected_sources)} sources selected",
+    )
+    event_recorder.emit(
+        stage="grounding",
+        status="completed",
+        title="Grounded facts built",
+        detail=f"{len(research_result.canonical_facts)} canonical facts extracted",
+    )
     try:
         state = run_workflow(
             topic,
@@ -537,8 +742,15 @@ def run_dynamic_workflow(
             demo_fault=demo_fault,
             dependencies=dependencies,
             learned_guardrails=learned_guardrails,
+            event_recorder=event_recorder,
         )
     except LLMRequestError as error:
+        event_recorder.emit(
+            stage="workflow",
+            status="failed",
+            title="Provider request failed",
+            detail=str(error),
+        )
         state = _save_workflow_failure(run_id, topic, error)
     if demo_fault == "none":
         update = update_memory_from_attempts(
@@ -564,4 +776,10 @@ def run_dynamic_workflow(
             {"skipped": "Demo-fault runs do not update cross-run learning memory."},
         )
     state["learned_guardrails"] = learned_guardrails
+    event_recorder.emit(
+        stage="memory",
+        status="completed",
+        title="Cross-run memory updated",
+        detail="Run failures were checked for recurring patterns.",
+    )
     return state

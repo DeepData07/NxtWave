@@ -136,6 +136,17 @@ class AttemptRecord(BaseModel):
     semantic_evaluation: SemanticEvaluation | None = None
 
 
+class WorkflowEvent(BaseModel):
+    """A persisted, presentation-safe progress event for one workflow run."""
+
+    timestamp: str = Field(min_length=1)
+    stage: str = Field(min_length=1)
+    status: Literal["started", "completed", "failed", "retry", "warning"]
+    title: str = Field(min_length=1)
+    detail: str = ""
+    attempt: int | None = Field(default=None, ge=0, le=2)
+
+
 class WorkflowState(BaseModel):
     """Explicit state contract to be used by the future LangGraph workflow."""
 
