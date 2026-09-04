@@ -31,6 +31,9 @@ _HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 _SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]+|[^.!?]+$")
 _LIST_ITEM_PATTERN = re.compile(r"^\s*(?:\d+[.)]|[-*+])\s+\S", re.MULTILINE)
+_NUMBERED_QUESTION_PATTERN = re.compile(r"^\s*\d+[.)]\s+(.+?)\s*$", re.MULTILINE)
+_FENCED_CODE_PATTERN = re.compile(r"^\s*```", re.MULTILINE)
+_UNESCAPED_DOLLAR_PATTERN = re.compile(r"(?<!\\)\$")
 
 
 class SemanticEvaluationError(RuntimeError):
@@ -137,9 +140,22 @@ def _section_text(lesson: str, section_name: str) -> str:
 
 
 def count_learner_questions(lesson: str) -> int:
-    """Count learner-check prompts, allowing numbered prompts without a question mark."""
+    """Count only complete numbered learner questions in the required final section."""
     section = _section_text(lesson, "Check your understanding")
-    return max(section.count("?"), len(_LIST_ITEM_PATTERN.findall(section)))
+    return sum("?" in match.group(1) for match in _NUMBERED_QUESTION_PATTERN.finditer(section))
+
+
+def _lesson_appears_truncated(lesson: str) -> bool:
+    """Detect only structural end-of-output signals; never attempt grammar judgment."""
+    stripped = lesson.rstrip()
+    if not stripped:
+        return False
+    if len(_FENCED_CODE_PATTERN.findall(lesson)) % 2:
+        return True
+    if len(_UNESCAPED_DOLLAR_PATTERN.findall(lesson)) % 2:
+        return True
+    final_line = next((line.strip() for line in reversed(stripped.splitlines()) if line.strip()), "")
+    return bool(_NUMBERED_QUESTION_PATTERN.match(final_line) and "?" not in final_line)
 
 
 def run_static_checks(
@@ -177,6 +193,14 @@ def run_static_checks(
             "Check your understanding must contain at least 3 questions; "
             f"found {learner_question_count}."
         )
+
+    learner_section = _section_text(lesson, "Check your understanding")
+    numbered_questions = list(_NUMBERED_QUESTION_PATTERN.finditer(learner_section))
+    if numbered_questions and any("?" not in question.group(1) for question in numbered_questions):
+        failures.append("Each numbered learner question must contain a question mark.")
+
+    if _lesson_appears_truncated(lesson):
+        failures.append("Lesson appears incomplete or truncated near the end.")
 
     recap = _section_text(lesson, "Quick recap")
     if not recap.strip():

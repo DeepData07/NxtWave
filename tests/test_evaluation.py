@@ -89,7 +89,7 @@ def test_missing_learner_questions_is_rejected() -> None:
     assert result.learner_question_count == 0
 
 
-def test_numbered_learner_prompts_count_even_without_question_marks() -> None:
+def test_numbered_learner_prompts_without_question_marks_are_rejected() -> None:
     lesson = good_lesson().replace(
         "1. What problem does this lesson describe?\n"
         "2. Why can this idea be useful?\n"
@@ -99,7 +99,42 @@ def test_numbered_learner_prompts_count_even_without_question_marks() -> None:
         "3. Name one limitation.",
     )
 
-    assert run_static_checks(lesson, TOPIC).learner_question_count == 3
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert result.learner_question_count == 0
+    assert any("question mark" in failure for failure in result.failures)
+
+
+def test_truncated_final_learner_question_is_rejected() -> None:
+    lesson = good_lesson().replace(
+        "3. What is one limitation to remember?",
+        "3. What is one limitation to remem",
+    )
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert result.learner_question_count == 2
+    assert "Lesson appears incomplete or truncated near the end." in result.failures
+
+
+def test_unmatched_fenced_code_block_is_rejected() -> None:
+    lesson = good_lesson() + "\n\n```python\nprint('unfinished')"
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert "Lesson appears incomplete or truncated near the end." in result.failures
+
+
+def test_unmatched_canonical_math_delimiter_is_rejected() -> None:
+    lesson = good_lesson() + "\n\n$A \\cdot B"
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert "Lesson appears incomplete or truncated near the end." in result.failures
 
 
 def test_invalid_retry_count_is_rejected() -> None:

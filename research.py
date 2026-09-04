@@ -87,7 +87,7 @@ def _fact_extraction_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "facts": {"type": "array", "minItems": 1, "maxItems": 4, "items": fact}
+            "facts": {"type": "array", "minItems": 1, "maxItems": 10, "items": fact}
         },
         "required": ["facts"],
         "additionalProperties": False,
@@ -310,7 +310,7 @@ def build_canonical_facts(
             raise ResearchError("Fact extraction returned an invalid canonical fact.") from error
     if not facts:
         raise ResearchError("Source curation completed but no canonical facts were extracted.")
-    return facts
+    return facts[:10]
 
 
 def _select_evidence_excerpt(statement: str, source_content: str) -> str:

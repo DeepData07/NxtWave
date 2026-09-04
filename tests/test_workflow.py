@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from evaluation import run_static_checks
 from lesson import inject_demo_fault
 from llm import LLMRequestError
@@ -88,6 +90,18 @@ def test_factual_demo_fault_is_repaired_and_audited(tmp_path, monkeypatch) -> No
     assert (run_directory / "final_lesson.md").is_file()
     summary = json.loads((run_directory / "run_summary.json").read_text(encoding="utf-8"))
     assert summary["attempt_count"] == 2
+
+
+def test_rag_factual_fault_is_rejected_for_non_rag_topics(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.RUNS_DIR", tmp_path / "runs")
+
+    with pytest.raises(ValueError, match="RAG-like topics"):
+        run_workflow(
+            "Cosine Similarity",
+            local_rag_facts(),
+            run_id="invalid_rag_fault",
+            demo_fault="rag_factual_error",
+        )
 
 
 def test_static_failure_routes_to_revision_even_when_semantic_gates_pass(

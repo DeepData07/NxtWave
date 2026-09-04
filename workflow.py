@@ -12,7 +12,7 @@ from typing import Any, Literal, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from config import ensure_run_directory, get_settings
-from evaluation import build_failure_packet, run_semantic_evaluation, run_static_checks
+from evaluation import calculate_diagnostics, build_failure_packet, run_semantic_evaluation, run_static_checks
 from lesson import (
     generate_lesson,
     inject_demo_fault,
@@ -236,17 +236,6 @@ def build_workflow(
             state["canonical_facts"],
             state.get("learned_guardrails", []),
         )
-        # Make the current draft readable by the UI while evaluation is still running.
-        # The existing persist node remains the authoritative attempt record writer.
-        save_lesson_artifact(lesson, state["run_id"], attempt_number=attempt)
-        if event_recorder is not None:
-            event_recorder.emit(
-                stage="generation",
-                status="completed",
-                title=f"Attempt {attempt + 1} generated",
-                detail=f"{len(lesson.split())} words",
-                attempt=attempt,
-            )
         return {
             "current_lesson": lesson,
             "prompt_kind": "initial",
@@ -254,6 +243,7 @@ def build_workflow(
         }
 
     def inject_fault_node(state: WorkflowData) -> dict[str, Any]:
+        lesson = dependencies.inject_fault(state["current_lesson"], state["demo_fault"])
         if event_recorder is not None and state["demo_fault"] != "none":
             event_recorder.emit(
                 stage="demo_fault",
@@ -262,10 +252,18 @@ def build_workflow(
                 detail="Applied after generation; the evaluator is not told the fault label.",
                 attempt=state["attempt_number"],
             )
-        return {
-            "current_lesson": dependencies.inject_fault(
-                state["current_lesson"], state["demo_fault"]
+        # The saved early draft, static checks, semantic evaluation, and UI all use this one artifact.
+        save_lesson_artifact(lesson, state["run_id"], attempt_number=state["attempt_number"])
+        if event_recorder is not None:
+            event_recorder.emit(
+                stage="generation",
+                status="completed",
+                title=f"Attempt {state['attempt_number'] + 1} generated",
+                detail=f"{calculate_diagnostics(lesson)['word_count']} words",
+                attempt=state["attempt_number"],
             )
+        return {
+            "current_lesson": lesson
         }
 
     def static_node(state: WorkflowData) -> dict[str, Any]:
@@ -424,14 +422,14 @@ def build_workflow(
             state["static_evaluation"].failures,
             state.get("learned_guardrails", []),
         )
-        # As above, this is a display artifact only until the normal persist node records checks.
+        # Save the exact canonical revision string that the downstream evaluators receive.
         save_lesson_artifact(lesson, state["run_id"], attempt_number=next_attempt)
         if event_recorder is not None:
             event_recorder.emit(
                 stage="generation",
                 status="completed",
                 title=f"Attempt {next_attempt + 1} generated",
-                detail=f"{len(lesson.split())} words",
+                detail=f"{calculate_diagnostics(lesson)['word_count']} words",
                 attempt=next_attempt,
             )
         return {
@@ -511,6 +509,8 @@ def run_workflow(
     """Run at most three complete lesson attempts and return the final graph state."""
     if not 0 <= max_retries <= 2:
         raise ValueError("max_retries must be between 0 and 2")
+    if demo_fault == "rag_factual_error" and "rag" not in topic.lower() and "retrieval-augmented generation" not in topic.lower():
+        raise ValueError("The RAG factual error demo fault is available only for RAG-like topics.")
     ensure_run_directory(run_id)
     workflow = build_workflow(dependencies or default_dependencies(), event_recorder)
     return workflow.invoke(

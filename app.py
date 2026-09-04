@@ -16,7 +16,7 @@ from workflow import DemoFault, run_dynamic_workflow
 
 FAULT_OPTIONS: dict[str, DemoFault] = {
     "None": "none",
-    "RAG factual error (demo only)": "rag_factual_error",
+    "RAG factual error (demo only; RAG topics only)": "rag_factual_error",
     "Overly technical language (demo only)": "overly_technical_language",
     "Remove example section (demo only)": "remove_example_section",
 }
