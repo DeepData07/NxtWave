@@ -210,6 +210,8 @@ def load_run_view(run_id: str, runs_directory: Path = RUNS_DIR) -> dict[str, Any
             "topic": summary.get("topic", ""),
             "status": summary.get("final_status", "UNKNOWN"),
             "attempt_count": len(attempts),
+            "mode": summary.get("mode", "live"),
+            "memory_write_enabled": summary.get("memory_write_enabled", True),
             "error": summary.get("error"),
         },
         "events": events,

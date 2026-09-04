@@ -12,6 +12,7 @@ from typing import Any, Literal, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from config import ensure_run_directory, get_settings
+from demo_scenario import deterministic_demo_enabled, run_deterministic_demo
 from evaluation import calculate_diagnostics, build_failure_packet, run_semantic_evaluation, run_static_checks
 from lesson import (
     generate_lesson,
@@ -667,6 +668,8 @@ def run_dynamic_workflow(
     The research and lesson artifacts deliberately share one run directory, so an
     interviewer can trace the exact source evidence behind every generated attempt.
     """
+    if deterministic_demo_enabled(topic):
+        return run_deterministic_demo(topic, run_id, event_sink)
     learner = learner_profile or LearnerProfile()
     event_recorder = RunEventRecorder(run_id, event_sink)
     event_recorder.emit(

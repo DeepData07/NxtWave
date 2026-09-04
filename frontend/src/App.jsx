@@ -22,7 +22,7 @@ export default function App() {
   const refreshRun = useCallback(async (id) => {
     const nextView = await getRun(id);
     setView(nextView);
-    setSelectedAttemptNumber((current) => current ?? nextView.attempts.at(-1)?.number ?? null);
+    setSelectedAttemptNumber((current) => nextView.run?.status !== "RUNNING" ? nextView.attempts.at(-1)?.number ?? null : current ?? nextView.attempts.at(-1)?.number ?? null);
     if (nextView.workflow_error?.message || nextView.run?.error) setError(nextView.workflow_error?.message || nextView.run.error);
     return nextView;
   }, []);
@@ -96,7 +96,7 @@ export default function App() {
       </section>}
 
       {view && <section className="run-area" aria-live="polite">
-        <div className="run-summary">{[["Topic", view.run.topic], ["Status", view.run.status.replaceAll("_", " ")], ["Attempts", view.attempts.length], ["Sources", view.grounding.source_count]].map(([label, value]) => <span className="summary-item" key={label}>{label}: <strong>{value}</strong></span>)}</div>
+        <div className="run-summary">{[["Topic", view.run.topic], ["Status", view.run.status.replaceAll("_", " ")], ["Attempts", view.attempts.length], ["Sources", view.grounding.source_count]].map(([label, value]) => <span className="summary-item" key={label}>{label}: <strong>{value}</strong></span>)}{view.run.mode === "deterministic_demo" && <span className="demo-badge">DEMO SCENARIO</span>}</div>
         <div className="current-step"><span>CURRENT STEP</span>{view.run.current_step || view.run.status.replaceAll("_", " ")}</div>
         <form className="new-topic-form" onSubmit={startRun}>
           <label htmlFor="next-topic">Generate another lesson</label>

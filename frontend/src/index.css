@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+.demo-badge { background:#f1f5f9; border:1px solid var(--border); border-radius:999px; color:var(--muted); font-size:.68rem; font-weight:700; letter-spacing:.06em; padding:3px 7px; }
+
 :root { color-scheme: light; --page:#f8fafc; --surface:#fff; --muted:#637083; --border:#dbe3ed; --text:#172033; --primary:#2563eb; --success:#15803d; --success-bg:#ecfdf3; --failure:#b42318; --failure-bg:#fff1f0; --warning:#a15c00; --warning-bg:#fff7e6; }
 * { box-sizing: border-box; }
 body { margin:0; min-width:320px; background:var(--page); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,sans-serif; line-height:1.55; }
