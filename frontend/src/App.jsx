@@ -9,15 +9,9 @@ export default function App() {
   const [runId, setRunId] = useState(null);
   const [topic, setTopic] = useState("Introduction to RAG");
   const [maxRevisions, setMaxRevisions] = useState(2);
-  const [demoFault, setDemoFault] = useState("none");
   const [selectedAttemptNumber, setSelectedAttemptNumber] = useState(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
-  const ragLikeTopic = /rag|retrieval-augmented generation/i.test(topic);
-
-  useEffect(() => {
-    if (!ragLikeTopic && demoFault === "rag_factual_error") setDemoFault("none");
-  }, [demoFault, ragLikeTopic]);
 
   const refreshRun = useCallback(async (id) => {
     const nextView = await getRun(id);
@@ -48,7 +42,7 @@ export default function App() {
     setStarting(true);
     setError("");
     try {
-      const created = await createRun({ topic: topic.trim(), maxRevisions: Number(maxRevisions), demoFault });
+      const created = await createRun({ topic: topic.trim(), maxRevisions: Number(maxRevisions), demoFault: "none" });
       setRunId(created.run_id);
       setSelectedAttemptNumber(null);
       await refreshRun(created.run_id);
@@ -87,7 +81,6 @@ export default function App() {
           <input id="topic" value={topic} onChange={(event) => setTopic(event.target.value)} maxLength="200" required />
           <div className="form-row">
             <div><label htmlFor="revisions">Maximum revisions</label><input id="revisions" type="number" min="0" max="2" value={maxRevisions} onChange={(event) => setMaxRevisions(event.target.value)} required /></div>
-            <div><label htmlFor="fault">Demo scenario (optional)</label><select id="fault" value={demoFault} onChange={(event) => setDemoFault(event.target.value)}><option value="none">Normal run — no forced issue</option><option value="rag_factual_error" disabled={!ragLikeTopic}>Force a factual claim issue (RAG topics only)</option><option value="overly_technical_language">Use language that is too technical for beginners</option><option value="remove_example_section">Remove the practical example section</option></select></div>
           </div>
           <Button type="submit" disabled={starting}>{starting ? "Starting…" : "Generate Lesson"}</Button>
           <p className="muted">Lessons are grounded using dynamically selected authoritative sources.</p>
