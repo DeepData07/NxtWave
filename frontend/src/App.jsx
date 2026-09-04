@@ -87,7 +87,7 @@ export default function App() {
           <input id="topic" value={topic} onChange={(event) => setTopic(event.target.value)} maxLength="200" required />
           <div className="form-row">
             <div><label htmlFor="revisions">Maximum revisions</label><input id="revisions" type="number" min="0" max="2" value={maxRevisions} onChange={(event) => setMaxRevisions(event.target.value)} required /></div>
-            <div><label htmlFor="fault">Demo fault</label><select id="fault" value={demoFault} onChange={(event) => setDemoFault(event.target.value)}><option value="none">None</option><option value="rag_factual_error" disabled={!ragLikeTopic}>RAG factual error</option><option value="overly_technical_language">Overly Technical Language</option><option value="remove_example_section">Remove Example</option></select></div>
+            <div><label htmlFor="fault">Demo scenario (optional)</label><select id="fault" value={demoFault} onChange={(event) => setDemoFault(event.target.value)}><option value="none">Normal run — no forced issue</option><option value="rag_factual_error" disabled={!ragLikeTopic}>Force a factual claim issue (RAG topics only)</option><option value="overly_technical_language">Use language that is too technical for beginners</option><option value="remove_example_section">Remove the practical example section</option></select></div>
           </div>
           <Button type="submit" disabled={starting}>{starting ? "Starting…" : "Generate Lesson"}</Button>
           <p className="muted">Lessons are grounded using dynamically selected authoritative sources.</p>

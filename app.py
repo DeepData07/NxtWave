@@ -15,10 +15,10 @@ from workflow import DemoFault, run_dynamic_workflow
 
 
 FAULT_OPTIONS: dict[str, DemoFault] = {
-    "None": "none",
-    "RAG factual error (demo only; RAG topics only)": "rag_factual_error",
-    "Overly technical language (demo only)": "overly_technical_language",
-    "Remove example section (demo only)": "remove_example_section",
+    "Normal run — no forced issue": "none",
+    "Force a factual claim issue (RAG topics only)": "rag_factual_error",
+    "Use language that is too technical for beginners": "overly_technical_language",
+    "Remove the practical example section": "remove_example_section",
 }
 GATE_IDS = [f"R{number}" for number in range(1, 9)]
 
@@ -210,7 +210,7 @@ def main() -> None:
         st.header("Run workflow")
         topic = st.text_input("Topic", value="Introduction to RAG")
         st.number_input("Maximum revisions", value=2, min_value=2, max_value=2, disabled=True)
-        fault_label = st.selectbox("Demo fault", list(FAULT_OPTIONS))
+        fault_label = st.selectbox("Demo scenario (optional)", list(FAULT_OPTIONS))
         run_clicked = st.button("Generate / Run Workflow", type="primary")
 
     if run_clicked:
