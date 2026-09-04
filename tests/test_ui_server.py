@@ -78,3 +78,4 @@ def test_fastapi_adapter_starts_a_run_and_exposes_only_ui_safe_artifacts(tmp_pat
         assert "READY TO SHIP" in client.get(f"/api/runs/{run_id}/events").text
         assert any(item["id"] == run_id for item in client.get("/api/runs").json())
         assert "NxtWave Lesson Quality Agent" in client.get("/").text
+        assert client.get("/assets/not-a-real-file.js").status_code == 404

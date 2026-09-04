@@ -143,6 +143,12 @@ def create_app(
     app = FastAPI(title="NxtWave Lesson Quality Agent UI", docs_url=None, redoc_url=None)
     app.state.registry = registry
     UI_DIRECTORY.mkdir(exist_ok=True)
+    if (UI_DIRECTORY / "assets").is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(UI_DIRECTORY / "assets")),
+            name="react-assets",
+        )
     app.mount("/ui", StaticFiles(directory=str(UI_DIRECTORY)), name="ui")
 
     @app.get("/", include_in_schema=False)
