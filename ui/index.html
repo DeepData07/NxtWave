@@ -100,11 +100,18 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
     <script>
       window.MathJax = {
+        loader: { load: ["[ui]/safe"] },
         tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
-        options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+        options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] },
+        startup: {
+          ready() {
+            MathJax.startup.defaultReady();
+            window.dispatchEvent(new Event("mathjax-ready"));
+          }
+        }
       };
     </script>
-    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="/ui/app.js" defer></script>
   </body>
 </html>

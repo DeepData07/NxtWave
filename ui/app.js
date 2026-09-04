@@ -24,6 +24,7 @@ let eventSource = null;
 let refreshTimer = null;
 let selectedAttemptNumber = null;
 let latestView = null;
+let mathTypesetQueue = Promise.resolve();
 
 const symbols = { completed: "✓", failed: "✕", retry: "↻", warning: "⚠", started: "◌" };
 
@@ -217,11 +218,56 @@ function renderRetryChanges(view, attempt) {
   });
 }
 
+function normaliseLegacyMath(math) {
+  // Compatibility only for clearly mathematical blocks produced by earlier runs.
+  // New prompts require valid LaTeX delimiters and do not rely on this repair.
+  return math
+    .replace(/(?<!\\)\|([A-Za-z][A-Za-z0-9_]*)\|/g, "\\lVert $1 \\rVert")
+    .replace(/\\rVert\s*;\s*\\lVert/g, "\\rVert \\cdot \\lVert");
+}
+
 function normaliseBracketedMath(markdown) {
-  return markdown.replace(/^\[\s*\n([\s\S]*?\\(?:frac|sqrt|operatorname|text|cdot|top|theta|[A-Za-z]))[\s\S]*?\n\s*\]$/gm, (block) => {
-    const inner = block.slice(1, -1).trim();
-    return `\\[\n${inner}\n\\]`;
+  return markdown.replace(/^\[\s*\n([\s\S]*?)\n\s*\]$/gm, (block, inner) => {
+    const looksMathematical = /\\(?:frac|sqrt|operatorname|text|cdot|times|top|theta|lVert|rVert)|[=^]/.test(inner);
+    return looksMathematical ? `\\[\n${normaliseLegacyMath(inner.trim())}\n\\]` : block;
   });
+}
+
+function normaliseTabSeparatedTables(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const output = [];
+  for (let index = 0; index < lines.length;) {
+    if (!lines[index].includes("\t")) {
+      output.push(lines[index]);
+      index += 1;
+      continue;
+    }
+    const rows = [];
+    const columnCount = lines[index].split("\t").length;
+    while (index < lines.length && lines[index].includes("\t") && lines[index].split("\t").length === columnCount) {
+      rows.push(lines[index].split("\t").map((cell) => cell.trim()));
+      index += 1;
+    }
+    if (rows.length < 2 || columnCount < 2) {
+      output.push(...rows.map((row) => row.join("\t")));
+      continue;
+    }
+    output.push(`| ${rows[0].join(" | ")} |`);
+    output.push(`| ${rows[0].map(() => "---").join(" | ")} |`);
+    rows.slice(1).forEach((row) => output.push(`| ${row.join(" | ")} |`));
+  }
+  return output.join("\n");
+}
+
+function normaliseLessonMarkdown(markdown) {
+  return normaliseBracketedMath(normaliseTabSeparatedTables(markdown));
+}
+
+function queueMathTypesetting(container) {
+  if (!window.MathJax?.typesetPromise) return;
+  mathTypesetQueue = mathTypesetQueue
+    .then(() => window.MathJax.typesetPromise([container]))
+    .catch(() => undefined);
 }
 
 function normaliseDisplayTitle(title, topic) {
@@ -257,7 +303,8 @@ function promoteBareDisplayHeadings(container, topic) {
 
 async function renderMarkdown(markdown, topic) {
   lessonContent.classList.remove("empty-state");
-  const safeMarkdown = normaliseBracketedMath(markdown);
+  if (window.MathJax?.typesetClear) window.MathJax.typesetClear([lessonContent]);
+  const safeMarkdown = normaliseLessonMarkdown(markdown);
   if (!window.marked || !window.DOMPurify) {
     lessonContent.textContent = markdown;
     return;
@@ -266,14 +313,12 @@ async function renderMarkdown(markdown, topic) {
   const firstHeading = lessonContent.querySelector("h1");
   if (firstHeading) firstHeading.textContent = normaliseDisplayTitle(firstHeading.textContent, topic);
   promoteBareDisplayHeadings(lessonContent, topic);
-  if (window.MathJax?.typesetPromise) {
-    try {
-      await window.MathJax.typesetPromise([lessonContent]);
-    } catch (_) {
-      // The safe Markdown content remains readable if a provider emitted invalid LaTeX.
-    }
-  }
+  queueMathTypesetting(lessonContent);
 }
+
+window.addEventListener("mathjax-ready", () => {
+  if (latestView) renderAttemptDetails(latestView);
+});
 
 function renderLesson(view, attempt) {
   if (!attempt?.lesson) {
