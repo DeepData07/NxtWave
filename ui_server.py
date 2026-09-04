@@ -155,6 +155,13 @@ def create_app(
     def index():
         index_path = UI_DIRECTORY / "index.html"
         if index_path.is_file():
+            if UI_DIRECTORY == REACT_UI_DIRECTORY:
+                # Vite writes root-relative asset URLs. The API server exposes the
+                # build under /ui as well, so use that stable path in production.
+                html = index_path.read_text(encoding="utf-8").replace(
+                    '"/assets/', '"/ui/assets/'
+                )
+                return HTMLResponse(html)
             return FileResponse(index_path)
         return HTMLResponse("<p>NxtWave UI Stage 2 adapter is running. The browser workspace arrives in Stage 3.</p>")
 
