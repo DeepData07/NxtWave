@@ -13,14 +13,63 @@ from prompts import build_generation_messages, build_lesson_plan_messages
 from prompts import build_revision_messages
 
 
+_LEGACY_DISPLAY_MATH = re.compile(r"^\[\s*\n(?P<body>[\s\S]*?)\n\s*\]$", re.MULTILINE)
+_LEGACY_MATH_SIGNALS = re.compile(
+    r"\\(?:frac|sqrt|operatorname|text|cdot|times|top|theta|mathbf)|[=^]"
+)
+_LEGACY_NORM = re.compile(r"(?<!\\)\|([A-Za-z][A-Za-z0-9_]*)\|")
+
+
+def _normalise_legacy_display_math(lesson: str) -> str:
+    """Repair unambiguous old `[ ... ]` TeX blocks without changing lesson meaning."""
+
+    def replace(match: re.Match[str]) -> str:
+        body = match.group("body").strip()
+        if not _LEGACY_MATH_SIGNALS.search(body):
+            return match.group(0)
+        body = _LEGACY_NORM.sub(r"\\lVert \1 \\rVert", body)
+        body = re.sub(r"\\rVert\s*;\s*\\lVert", r"\\rVert \\cdot \\lVert", body)
+        return f"\\[\n{body}\n\\]"
+
+    return _LEGACY_DISPLAY_MATH.sub(replace, lesson)
+
+
+def _normalise_tab_separated_tables(lesson: str) -> str:
+    """Convert simple tab-separated model tables into portable Markdown tables."""
+    lines = lesson.splitlines()
+    output: list[str] = []
+    index = 0
+    while index < len(lines):
+        if "\t" not in lines[index]:
+            output.append(lines[index])
+            index += 1
+            continue
+        column_count = len(lines[index].split("\t"))
+        rows: list[list[str]] = []
+        while (
+            index < len(lines)
+            and "\t" in lines[index]
+            and len(lines[index].split("\t")) == column_count
+        ):
+            rows.append([cell.strip().replace("|", "\\|") for cell in lines[index].split("\t")])
+            index += 1
+        if len(rows) < 2 or column_count < 2:
+            output.extend("\t".join(row) for row in rows)
+            continue
+        output.append(f"| {' | '.join(rows[0])} |")
+        output.append(f"| {' | '.join('---' for _ in rows[0])} |")
+        output.extend(f"| {' | '.join(row)} |" for row in rows[1:])
+    return "\n".join(output)
+
+
 def normalise_lesson_markdown(lesson: str, topic: str) -> str:
-    """Add Markdown markers to exact bare contract headings without inventing content."""
+    """Make model Markdown portable without inventing or completing lesson content."""
     normalised = lesson
     for index, heading in enumerate(expected_headings(topic)):
         marker = "#" if index == 0 else "##"
         pattern = rf"(?im)^(?!\s*#)\s*{re.escape(heading)}\s*$"
         normalised = re.sub(pattern, f"{marker} {heading}", normalised)
-    return normalised
+    return _normalise_legacy_display_math(_normalise_tab_separated_tables(normalised))
 
 
 def plan_lesson(

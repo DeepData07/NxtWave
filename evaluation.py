@@ -178,6 +178,10 @@ def run_static_checks(
             f"found {learner_question_count}."
         )
 
+    recap = _section_text(lesson, "Quick recap")
+    if not recap.strip():
+        failures.append("Quick recap must contain a short summary, not only its heading.")
+
     if not 0 <= attempt_number <= max_retries:
         failures.append(
             f"Attempt number {attempt_number} is outside the allowed 0-{max_retries} range."

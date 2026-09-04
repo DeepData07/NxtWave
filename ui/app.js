@@ -263,6 +263,50 @@ function normaliseLessonMarkdown(markdown) {
   return normaliseBracketedMath(normaliseTabSeparatedTables(markdown));
 }
 
+function protectMathForMarkdown(markdown) {
+  // Marked is excellent for prose and tables, but it is not a TeX parser. Keep
+  // TeX opaque while Markdown is parsed so underscores, pipes, and asterisks in
+  // formulas cannot be interpreted as Markdown syntax before MathJax sees them.
+  const formulas = [];
+  const placeholder = (formula) => {
+    const token = `@@NXTWAVE_MATH_${formulas.length}@@`;
+    formulas.push(formula);
+    return token;
+  };
+  let protectedMarkdown = markdown.replace(/\\\[[\s\S]*?\\\]/g, placeholder);
+  protectedMarkdown = protectedMarkdown.replace(/\\\([\s\S]*?\\\)/g, placeholder);
+  return { markdown: protectedMarkdown, formulas };
+}
+
+function restoreProtectedMath(container, formulas) {
+  if (!formulas.length) return;
+  const tokenPattern = /@@NXTWAVE_MATH_(\d+)@@/g;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+  textNodes.forEach((node) => {
+    const source = node.nodeValue || "";
+    let lastIndex = 0;
+    let match;
+    let fragment = null;
+    tokenPattern.lastIndex = 0;
+    while ((match = tokenPattern.exec(source)) !== null) {
+      fragment ||= document.createDocumentFragment();
+      if (match.index > lastIndex) {
+        fragment.append(document.createTextNode(source.slice(lastIndex, match.index)));
+      }
+      fragment.append(document.createTextNode(formulas[Number(match[1])] || match[0]));
+      lastIndex = tokenPattern.lastIndex;
+    }
+    if (!fragment) return;
+    if (lastIndex < source.length) {
+      fragment.append(document.createTextNode(source.slice(lastIndex)));
+    }
+    node.replaceWith(fragment);
+  });
+}
+
 function queueMathTypesetting(container) {
   if (!window.MathJax?.typesetPromise) return;
   mathTypesetQueue = mathTypesetQueue
@@ -309,7 +353,9 @@ async function renderMarkdown(markdown, topic) {
     lessonContent.textContent = markdown;
     return;
   }
-  lessonContent.innerHTML = DOMPurify.sanitize(marked.parse(safeMarkdown, { gfm: true, breaks: true }));
+  const protectedMath = protectMathForMarkdown(safeMarkdown);
+  lessonContent.innerHTML = DOMPurify.sanitize(marked.parse(protectedMath.markdown, { gfm: true, breaks: true }));
+  restoreProtectedMath(lessonContent, protectedMath.formulas);
   const firstHeading = lessonContent.querySelector("h1");
   if (firstHeading) firstHeading.textContent = normaliseDisplayTitle(firstHeading.textContent, topic);
   promoteBareDisplayHeadings(lessonContent, topic);

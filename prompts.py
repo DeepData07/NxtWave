@@ -23,7 +23,9 @@ familiar example. Follow prerequisite order. Use only grounded facts."""
 
 MARKDOWN_COMPLETION_POLICY = """Formatting is a hard requirement:
 - Output Markdown headings with the exact `#` and `##` markers shown in the contract.
-- Keep the whole lesson to 850-1000 words and reserve space for the final recap and three questions before writing detail.
+- Keep the whole lesson to 800-950 words and reserve the final 120 words before writing detail.
+- End with a non-empty `## Quick recap` containing three short bullets, followed immediately by `## Check your understanding`.
+- In `Check your understanding`, write exactly three numbered, one-sentence questions. Do not use multiple-choice options, answer keys, or explanations; complete questions are more useful than an unfinished long quiz.
 - If mathematical notation is needed, use standard LaTeX: inline `\\( ... \\)` and display `\\[ ... \\]`.
 - Use `\\|x\\|` for norms; never put equations inside plain `[ ... ]`, and never put punctuation inside a formula just for prose.
 - Explain every mathematical symbol in simple language immediately after it.
@@ -120,7 +122,8 @@ def build_generation_messages(
                 f"\n\n{MARKDOWN_COMPLETION_POLICY}\n\nUse these exact Markdown headings:\n"
                 f"{heading_contract}\n\n"
                 "The Step-by-step example must use a familiar situation and walk through "
-                "the full process. The final section must contain at least three questions."
+                "the full process. Finish the recap and all three short learner questions "
+                "before adding optional detail."
             ),
         },
     ]
@@ -196,8 +199,8 @@ def build_revision_messages(
                 f"\n\nSemantic failure packet:\n{semantic_feedback}"
                 f"\n\n{MARKDOWN_COMPLETION_POLICY}\nNever end before the final learner-check section."
                 "\n\nUse this complete Markdown heading contract. Keep every section, "
-                "do not rename headings, and put at least three numbered questions in the final "
-                "section:\n"
+                "do not rename headings, and put exactly three short numbered questions in the "
+                "final section:\n"
                 f"{heading_contract}"
                 f"\n\nPrevious lesson:\n--- BEGIN LESSON ---\n{previous_lesson}"
                 "\n--- END LESSON ---"

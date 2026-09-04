@@ -57,7 +57,7 @@ def get_settings() -> Settings:
         request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS") or "30"),
         fast_model_max_tokens=int(os.getenv("FAST_MODEL_MAX_TOKENS") or "400"),
         generator_model_max_tokens=int(
-            os.getenv("GENERATOR_MODEL_MAX_TOKENS") or "2200"
+            os.getenv("GENERATOR_MODEL_MAX_TOKENS") or "2500"
         ),
         evaluator_model_max_tokens=int(
             os.getenv("EVALUATOR_MODEL_MAX_TOKENS") or "1200"

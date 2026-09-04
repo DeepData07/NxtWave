@@ -53,6 +53,21 @@ def test_missing_recap_section_is_rejected() -> None:
     assert "Quick recap" in result.missing_headings
 
 
+def test_empty_recap_is_rejected_before_semantic_evaluation() -> None:
+    lesson = good_lesson().replace(
+        "## Quick recap\n\n" + " ".join([
+            "This short explanation gives a beginner one clear practical idea, explains why "
+            "it matters, and connects the idea to a safe useful learning goal today."
+        ] * 5),
+        "## Quick recap",
+    )
+
+    result = run_static_checks(lesson, TOPIC)
+
+    assert result.passed is False
+    assert any("Quick recap must contain a short summary" in failure for failure in result.failures)
+
+
 def test_too_short_lesson_is_rejected() -> None:
     result = run_static_checks(short_lesson(), TOPIC)
 

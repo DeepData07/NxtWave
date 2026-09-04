@@ -116,3 +116,20 @@ def test_exact_bare_heading_is_normalised_without_creating_missing_sections() ->
     assert normalised.startswith("# What is Cosine Similarity?")
     assert "## Quick recap" in normalised
     assert "## Check your understanding" not in normalised
+
+
+def test_legacy_math_and_tabular_output_are_made_portable() -> None:
+    lesson = (
+        "What is Cosine Similarity\n\n"
+        "Value\tMeaning\n"
+        "1\tSame direction\n\n"
+        "[\n"
+        "\\text{sim}(A,B)=\\frac{A\\cdot B}{|A|;|B|}\n"
+        "]"
+    )
+
+    normalised = normalise_lesson_markdown(lesson, "What is Cosine Similarity")
+
+    assert "| Value | Meaning |" in normalised
+    assert "\\[" in normalised
+    assert "\\lVert A \\rVert \\cdot \\lVert B \\rVert" in normalised
