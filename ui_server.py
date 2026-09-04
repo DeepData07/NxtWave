@@ -26,7 +26,10 @@ from ui_contract import list_run_ids, load_run_view
 from workflow import DemoFault, WorkflowData, run_dynamic_workflow
 
 
-UI_DIRECTORY = PROJECT_ROOT / "ui"
+# Production builds contain the current React interface. Keep the older local
+# static files only as a development fallback before a frontend build exists.
+REACT_UI_DIRECTORY = PROJECT_ROOT / "frontend" / "dist"
+UI_DIRECTORY = REACT_UI_DIRECTORY if REACT_UI_DIRECTORY.is_dir() else PROJECT_ROOT / "ui"
 RunWorkflow = Callable[..., WorkflowData]
 
 
