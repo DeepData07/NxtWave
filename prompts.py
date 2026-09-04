@@ -21,6 +21,14 @@ STABLE_LESSON_POLICY = """You are creating a lesson for a zero-background learne
 Teach using simple English. Explain technical words when they first appear. Use a
 familiar example. Follow prerequisite order. Use only grounded facts."""
 
+MARKDOWN_COMPLETION_POLICY = """Formatting is a hard requirement:
+- Output Markdown headings with the exact `#` and `##` markers shown in the contract.
+- Keep the whole lesson to 850-1000 words and reserve space for the final recap and three questions before writing detail.
+- If mathematical notation is needed, use standard LaTeX: inline `\\( ... \\)` and display `\\[ ... \\]`.
+- Use `\\|x\\|` for norms; never put equations inside plain `[ ... ]`, and never put punctuation inside a formula just for prose.
+- Explain every mathematical symbol in simple language immediately after it.
+- If the topic already begins with `What is...` or `Introduction to...`, do not repeat that prefix in another lesson title or section heading."""
+
 SEMANTIC_GATE_RUBRIC = [
     {"gate_id": "R1", "name": "Factual Accuracy", "rule": "No material claim contradicts supported canonical facts or presents a misconception as fact."},
     {"gate_id": "R2", "name": "Essential Coverage", "rule": "Teaches what the topic is, why it matters, how it works, core components, and a limitation."},
@@ -109,8 +117,7 @@ def build_generation_messages(
                 f"\n\nLesson outline:\n{json.dumps(lesson_plan.model_dump(), indent=2)}"
                 f"\n\nSupported facts:\n{_facts_context(canonical_facts)}"
                 f"\n\nActive learned guardrails:\n{_guardrail_context(learned_guardrails)}"
-                "\n\nWrite 1000-1100 words. Budget space for every heading, especially the "
-                "recap and final learner-check section. Use these exact Markdown headings:\n"
+                f"\n\n{MARKDOWN_COMPLETION_POLICY}\n\nUse these exact Markdown headings:\n"
                 f"{heading_contract}\n\n"
                 "The Step-by-step example must use a familiar situation and walk through "
                 "the full process. The final section must contain at least three questions."
@@ -187,8 +194,7 @@ def build_revision_messages(
                 f"\n\nActive learned guardrails:\n{_guardrail_context(learned_guardrails)}"
                 f"\n\nDeterministic failures to repair:\n{static_feedback}"
                 f"\n\nSemantic failure packet:\n{semantic_feedback}"
-                "\n\nWrite 1000-1100 words. Budget space for every section; never end before "
-                "the final learner-check section."
+                f"\n\n{MARKDOWN_COMPLETION_POLICY}\nNever end before the final learner-check section."
                 "\n\nUse this complete Markdown heading contract. Keep every section, "
                 "do not rename headings, and put at least three numbered questions in the final "
                 "section:\n"

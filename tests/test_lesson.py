@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from config import Settings
-from lesson import generate_lesson, plan_lesson, save_lesson_artifact
+from lesson import generate_lesson, normalise_lesson_markdown, plan_lesson, save_lesson_artifact
 from models import LearnerProfile, LessonPlan
 from tests.rag_facts_fixture import local_rag_facts
 
@@ -96,6 +96,7 @@ def test_generation_prompt_contains_learner_and_fact_contract() -> None:
     assert "12th-grade graduate" in user_prompt
     assert "FACT_003" in user_prompt
     assert "## Step-by-step example" in user_prompt
+    assert "standard LaTeX" in user_prompt
 
 
 def test_generated_lesson_is_saved_as_an_attempt_artifact(tmp_path, monkeypatch) -> None:
@@ -105,3 +106,13 @@ def test_generated_lesson_is_saved_as_an_attempt_artifact(tmp_path, monkeypatch)
 
     assert artifact_path.name == "attempt_0.md"
     assert artifact_path.read_text(encoding="utf-8") == "# Lesson"
+
+
+def test_exact_bare_heading_is_normalised_without_creating_missing_sections() -> None:
+    lesson = "What is Cosine Similarity?\n\nA short introduction.\n\nQuick recap"
+
+    normalised = normalise_lesson_markdown(lesson, "What is Cosine Similarity?")
+
+    assert normalised.startswith("# What is Cosine Similarity?")
+    assert "## Quick recap" in normalised
+    assert "## Check your understanding" not in normalised

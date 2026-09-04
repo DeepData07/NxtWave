@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from config import Settings, ensure_run_directory, get_settings
+from evaluation import expected_headings
 from llm import LLMRequestError, call_json_model, call_text_model
 from models import CanonicalFact, FailurePacket, LearnerProfile, LessonPlan
 from prompts import build_generation_messages, build_lesson_plan_messages
 from prompts import build_revision_messages
+
+
+def normalise_lesson_markdown(lesson: str, topic: str) -> str:
+    """Add Markdown markers to exact bare contract headings without inventing content."""
+    normalised = lesson
+    for index, heading in enumerate(expected_headings(topic)):
+        marker = "#" if index == 0 else "##"
+        pattern = rf"(?im)^(?!\s*#)\s*{re.escape(heading)}\s*$"
+        normalised = re.sub(pattern, f"{marker} {heading}", normalised)
+    return normalised
 
 
 def plan_lesson(
@@ -50,7 +62,7 @@ def generate_lesson(
 ) -> str:
     """Generate a complete first-attempt lesson from an auditable fact contract."""
     settings = settings or get_settings()
-    return call_text_model(
+    lesson = call_text_model(
         build_generation_messages(
             topic, learner, lesson_plan, canonical_facts, learned_guardrails
         ),
@@ -60,6 +72,7 @@ def generate_lesson(
         client=client,  # type: ignore[arg-type]
         settings=settings,
     )
+    return normalise_lesson_markdown(lesson, topic)
 
 
 def revise_lesson(
@@ -76,7 +89,7 @@ def revise_lesson(
 ) -> str:
     """Return a complete revised lesson using evaluator feedback, never a patch description."""
     settings = settings or get_settings()
-    return call_text_model(
+    lesson = call_text_model(
         build_revision_messages(
             topic,
             learner,
@@ -92,6 +105,7 @@ def revise_lesson(
         client=client,  # type: ignore[arg-type]
         settings=settings,
     )
+    return normalise_lesson_markdown(lesson, topic)
 
 
 def inject_demo_fault(lesson: str, fault: str) -> str:

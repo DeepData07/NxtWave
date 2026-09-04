@@ -39,10 +39,16 @@ class SemanticEvaluationError(RuntimeError):
 
 def expected_headings(topic: str) -> list[str]:
     """Return the predictable heading contract for a lesson topic."""
+    subject = re.sub(r"^what is\s+", "", topic, flags=re.IGNORECASE).rstrip("?!: ")
+    concept_heading = (
+        f"What does {subject} mean?"
+        if re.match(r"^what is\s+", topic, flags=re.IGNORECASE)
+        else f"What is {topic}"
+    )
     return [
         topic,
         "Start with a simple problem",
-        f"What is {topic}",
+        concept_heading,
         "Why does it matter",
         "How does it work",
         "Step-by-step example",
@@ -89,12 +95,15 @@ def _normalise_heading(heading: str) -> str:
 def _heading_aliases(topic: str) -> dict[str, set[str]]:
     """Allow a small set of pedagogical heading variants without weakening coverage."""
     simplified_topic = re.sub(r"^introduction to\s+", "", topic, flags=re.IGNORECASE)
-    return {
+    aliases = {
         "Start with a simple problem": {"A simple problem"},
-        f"What is {topic}": {f"What is {simplified_topic}"},
         "Why does it matter": {f"Why does {simplified_topic} matter"},
         "How does it work": {f"How does {simplified_topic} work"},
     }
+    concept_heading = expected_headings(topic)[2]
+    if concept_heading.startswith("What is "):
+        aliases[concept_heading] = {f"What is {simplified_topic}"}
+    return aliases
 
 
 def _heading_is_present(

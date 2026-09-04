@@ -43,6 +43,8 @@
 
       <section id="run-area" class="run-area" hidden aria-live="polite">
         <div id="run-summary" class="run-summary"></div>
+        <div id="current-step" class="current-step" hidden></div>
+        <div id="completion-notice" class="completion-notice" hidden></div>
         <p id="run-error" class="run-error" hidden></p>
 
         <div class="workspace">
@@ -52,6 +54,28 @@
               <h2>How the system is working</h2>
             </div>
             <ol id="timeline" class="timeline"></ol>
+
+            <section class="attempt-section" aria-labelledby="attempt-heading">
+              <p class="eyebrow">ATTEMPTS</p>
+              <h2 id="attempt-heading">Draft and revision history</h2>
+              <div id="attempt-cards" class="attempt-cards"></div>
+            </section>
+
+            <section id="gate-section" class="inspection-section" hidden>
+              <p class="eyebrow">QUALITY GATES</p>
+              <h2>Selected attempt</h2>
+              <div id="gate-list" class="gate-list"></div>
+            </section>
+
+            <section id="static-section" class="inspection-section" hidden>
+              <p class="eyebrow">STATIC CHECKS</p>
+              <div id="static-checks" class="static-checks"></div>
+            </section>
+
+            <section id="changes-section" class="inspection-section" hidden>
+              <p class="eyebrow">WHAT CHANGED</p>
+              <div id="retry-changes" class="retry-changes"></div>
+            </section>
           </aside>
 
           <section class="lesson-panel" aria-labelledby="lesson-heading">
@@ -60,7 +84,10 @@
                 <p class="eyebrow">LESSON OUTPUT</p>
                 <h2 id="lesson-heading">Waiting for first lesson draft...</h2>
               </div>
-              <span id="lesson-status" class="status-pill status-running">RUNNING</span>
+              <div class="lesson-actions">
+                <button id="download-lesson" class="download-button" type="button" disabled>Download .md</button>
+                <span id="lesson-status" class="status-pill status-running">RUNNING</span>
+              </div>
             </div>
             <article id="lesson-content" class="lesson-content empty-state">
               The first generated lesson will appear here while its quality checks run.
@@ -69,6 +96,15 @@
         </div>
       </section>
     </main>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+        options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+      };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="/ui/app.js" defer></script>
   </body>
 </html>

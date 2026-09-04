@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from evaluation import HARD_MIN_WORDS, calculate_diagnostics, run_static_checks
+from evaluation import HARD_MIN_WORDS, calculate_diagnostics, expected_headings, run_static_checks
 from tests.lesson_fixtures import TOPIC, good_lesson, short_lesson
 
 
@@ -35,6 +35,13 @@ def test_harmless_heading_typography_and_topic_variants_are_accepted() -> None:
 
     assert result.passed is True
     assert result.missing_headings == []
+
+
+def test_question_form_topic_does_not_create_a_duplicate_question_heading() -> None:
+    headings = expected_headings("What is Cosine Similarity?")
+
+    assert headings[0] == "What is Cosine Similarity?"
+    assert headings[2] == "What does Cosine Similarity mean?"
 
 
 def test_missing_recap_section_is_rejected() -> None:
